@@ -298,19 +298,19 @@ class Exp_Main(Exp_Basic):
             os.makedirs(folder_path)
 
         mae, mse, rmse, mape, mspe, rse, corr = metric(preds, trues)
-        print('mse:{}, mae:{}, rse:{}'.format(mse, mae, rse))
-        f = open("result.txt", 'a')
-        f.write(setting + "  \n")
-        f.write('mse:{}, mae:{}, rse:{}'.format(mse, mae, rse))
-        f.write('\n')
-        f.write('\n')
-        f.close()
+        # print('mse:{}, mae:{}, rse:{}'.format(mse, mae, rse))
+        # f = open("result.txt", 'a')
+        # f.write(setting + "  \n")
+        # f.write('mse:{}, mae:{}, rse:{}'.format(mse, mae, rse))
+        # f.write('\n')
+        # f.write('\n')
+        # f.close()
 
         # np.save(folder_path + 'metrics.npy', np.array([mae, mse, rmse, mape, mspe,rse, corr]))
-        np.save(folder_path + 'pred.npy', preds)
+        # np.save(folder_path + 'pred.npy', preds)
         # np.save(folder_path + 'true.npy', trues)
         # np.save(folder_path + 'x.npy', inputx)
-        return
+        return mse, mae
 
     def predict(self, setting, load=False):
         pred_data, pred_loader = self._get_data(flag='pred')
