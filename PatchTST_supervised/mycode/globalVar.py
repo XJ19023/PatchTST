@@ -1,13 +1,18 @@
 from safetensors.torch import save_file
 
-iterationCounter = 0
-def increas_iterationCounter():
-    global iterationCounter
-    iterationCounter += 1
-    return iterationCounter
-def get_iterationCounter():
-    global iterationCounter
-    return iterationCounter
+true_counter = 0
+false_counter = 0
+def increas_counter(x: bool):
+    global true_counter
+    global false_counter
+    if x:
+        true_counter += 1
+    else:
+        false_counter += 1
+    # return true_counter, false_counter
+def get_counter():
+    global true_counter, false_counter
+    return true_counter, false_counter
 
 
 activations_save = {}

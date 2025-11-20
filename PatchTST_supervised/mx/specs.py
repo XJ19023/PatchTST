@@ -117,6 +117,8 @@ class MxSpecs(collections.UserDict):
             "vec_use_recip": False,
 
             "custom_cuda": False,
+
+            "acc_bits": 0,
         }
 
         self.help_strings = {
@@ -161,6 +163,8 @@ class MxSpecs(collections.UserDict):
             "vec_use_recip": "Use 1/x to compute division",
 
             "custom_cuda": "Enable custom CUDA kernels for quantization",
+
+            "acc_bits": "accumulator bits for matmul and other operations. ",
         }
 
         for k in defaults:

@@ -6,14 +6,83 @@ Licensed under the MIT License.
 import torch
 import torch.nn.functional as F
 
-from .mx_ops import quantize_mx_op
+from .mx_ops import quantize_mx_op, _shared_exponents, _quantize_elemwise_core
 from .elemwise_ops import quantize_elemwise_op
 from .specs import apply_mx_specs, get_backwards_mx_specs
 from .specs import mx_assert_test
 from .matmul_precision import set_matmul_precision
 
+from mycode.globalVar import increas_counter, get_counter
+
 f_linear = F.linear
 torch_matmul = torch.matmul
+
+def matmul_decompose_general(A, B, acc_bits):
+    """
+    A: (..., M, K)
+    B: (K, N)
+    return:
+        P: (..., M, K, N)  # all pairwise products
+        C: (..., M, N)     # sum along K (matmul result)
+    """
+
+    # Expand A → (..., M, K, 1)
+    A_exp = A.unsqueeze(-1)
+
+    # Expand B → (1, ..., 1, K, N) 让它能广播
+    # 在前面加与 A 相同数量的 batch 维
+    expand_dims = A.dim() - 2  # A 的 batch 维数
+    B_exp = B.view(*([1] * expand_dims), B.shape[0], B.shape[1])
+    # B_exp shape = (..., K, N)
+
+    # Step 1：pairwise 乘法 → (..., M, K, N)
+    P = A_exp * B_exp
+
+    # Step 2：对 K 维求和 → (..., M, N)
+    # Y = P.sum(dim=-2)
+    # 把 N 和 K 交换
+    Pt = P.transpose(-1, -2)  # (..., K, N)
+    max_exp = _shared_exponents(Pt, axes=[-1])
+
+    Pt = Pt / (2**max_exp)
+    mbits = acc_bits + 1  # include sign bit and hidden bit
+    max_norm = float(2**(mbits-1) - 1) / 2**(mbits-2)
+    Pt = _quantize_elemwise_core(
+                Pt, mbits, 0, max_norm, round='floor',
+                allow_denorm=True, saturate_normals=True,
+                custom_cuda=False)
+    Pt = Pt * (2**max_exp)
+
+    ones = torch.ones(Pt.shape[-1], device=Pt.device, dtype=Pt.dtype)  # shape: (N,)
+    Y = torch.matmul(Pt, ones)  # (..., K)
+
+    return Y
+
+def matmul_split_B(A, B, acc_bits, chunk_size=2):
+    """
+    A: (..., M, K)
+    B: (K, N)
+    将 B 沿最后一维（列 N）分块，逐块计算 A @ B_chunk，避免 OOM。
+    返回: (..., M, N)
+    """
+    K = A.shape[-1]
+    assert B.shape[0] == K, "A and B shape mismatch"
+
+    N = B.shape[1]
+    outputs = []   # 保存每个块的结果
+
+    for start in range(0, N, chunk_size):
+        end = min(start + chunk_size, N)
+        B_chunk = B[:, start:end]        # shape: (K, chunk)
+
+        # 逐块矩阵乘法
+        # C_chunk = A @ B_chunk            # shape: (..., M, chunk)
+        C_chunk = matmul_decompose_general(A, B_chunk, acc_bits)  # 使用分解方法
+
+        outputs.append(C_chunk)
+
+    # 沿最后一维拼接
+    return torch.cat(outputs, dim=-1)
 
 class LinearFunction(torch.autograd.Function):
     @staticmethod
@@ -58,9 +127,6 @@ class LinearFunction(torch.autograd.Function):
         else:
             ctx.save_for_backward(input, weight)
 
-        print('act type', input.dtype, bf_in.dtype)
-        print('weight type',weight.dtype, bf_weight.dtype)
-        exit()
         # MX quantize everything along input size
         qis_input = quantize_mx_op(
             bf_in,
@@ -82,12 +148,19 @@ class LinearFunction(torch.autograd.Function):
         if qis_weight.dtype == torch.bfloat16 and qis_input.dtype != torch.bfloat16:
             qis_weight = qis_weight.to(qis_input.dtype)
 
-        # compute output
-        with set_matmul_precision(qis_input, qis_weight,
-                                mx_specs['a_elem_format'],
-                                mx_specs['w_elem_format']):
-            output = f_linear(qis_input, qis_weight)
-        
+
+        if mx_specs['acc_bits']:
+            try:
+                output = matmul_decompose_general(qis_input, qis_weight.transpose(0, 1), acc_bits=mx_specs['acc_bits'])
+            except:
+                try:
+                    output = matmul_split_B(qis_input, qis_weight.transpose(0, 1), acc_bits=mx_specs['acc_bits'], chunk_size=8)
+                except:
+                    raise SystemExit
+        else:
+            output = qis_input @ qis_weight.transpose(0, 1)
+
+        # print(increas_counter(output.equal(output_org)))
         output = quantize_elemwise_op(
             output, mx_specs=mx_specs, round=mx_specs["round_output"]
         )

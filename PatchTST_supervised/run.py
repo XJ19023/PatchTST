@@ -97,7 +97,8 @@ if __name__ == '__main__':
 
     parser.add_argument('--w_elem_format', type=str, default='int4', help='gpu')
     parser.add_argument('--a_elem_format', type=str, default='int4', help='gpu')
-    parser.add_argument('--block_size', type=int, default=16, help='gpu')
+    parser.add_argument('--block_size', type=int, default=0, help='gpu')
+    parser.add_argument('--acc_bits', type=int, default=0, help='gpu')
     args = parser.parse_args()
 
     # random seed
@@ -132,13 +133,13 @@ if __name__ == '__main__':
         for s in sub_tokens:
             cur_mod = getattr(cur_mod, s)
         setattr(cur_mod, tokens[-1], module)
-    mx_specs = set_mx_specs(block_size=args.block_size, w_elem_format=args.w_elem_format, a_elem_format=args.a_elem_format)
+    mx_specs = set_mx_specs(block_size=args.block_size, w_elem_format=args.w_elem_format, a_elem_format=args.a_elem_format, acc_bits=args.acc_bits)
 
-
-    for name, module in exp.model.named_modules():
-        if isinstance(module, torch.nn.Linear):
-            new_layer = mxLinear.set_param(module, mx_specs=mx_specs, name=name)
-            _set_module(exp.model, name, new_layer)
+    if args.block_size:
+        for name, module in exp.model.named_modules():
+            if isinstance(module, torch.nn.Linear):
+                new_layer = mxLinear.set_param(module, mx_specs=mx_specs, name=name)
+                _set_module(exp.model, name, new_layer)
 
     if args.is_training:
         for ii in range(args.itr):
@@ -200,6 +201,6 @@ if __name__ == '__main__':
 
         print('MSE: {}, MAE: {}'.format(mse, mae))
         with open(f"logs/{args.model_id}.txt", 'a') as f:
-            f.write(f"mse:{mse:.6f}, mae:{mae:.6f}, mx_specs:{mx_specs['block_size']},{mx_specs['w_elem_format']}, ")
+            f.write(f"mse:{mse:.20f}, mae:{mae:.6f}, mx_specs:{mx_specs['block_size']},{mx_specs['w_elem_format']}, {args.acc_bits}")
             f.write('\n')
         

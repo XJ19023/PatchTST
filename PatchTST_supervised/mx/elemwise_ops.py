@@ -253,6 +253,7 @@ def quantize_elemwise_op(A, mx_specs, round=None):
     if mx_specs['bfloat'] > 0 and mx_specs['fp'] > 0:
         raise ValueError("Cannot set both [bfloat] and [fp] in mx_specs.")
     elif mx_specs['bfloat'] > 9: # default round='nearest', 走的是这个分支，还是fp32
+        # e8m7, 1.将尾数左移7位，2.rounding，3.右移7位
         A = _quantize_bfloat(A, bfloat=mx_specs['bfloat'], round=round,
                              custom_cuda=mx_specs['custom_cuda'],
                              allow_denorm=mx_specs['bfloat_subnorms'])

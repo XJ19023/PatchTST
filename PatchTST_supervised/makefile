@@ -8,11 +8,13 @@ debug:
 	seq_len=336; \
 	model_name=PatchTST; \
 	model_id_name=weather; \
-	for pred_len in 96; do \
-		for block_size in 8; do \
-			for elem_format in int8; do \
-			python -u run.py --random_seed=2021 --is_training=0 --root_path=./dataset/ --data_path=weather.csv --model_id=$${model_id_name}_$${seq_len}_$$pred_len --model=$$model_name --data=custom --features=M --seq_len=$${seq_len} --pred_len=$$pred_len --enc_in=21 --e_layers=3 --n_heads=16 --d_model=128 --d_ff=256 --dropout=0.2 --fc_dropout=0.2 --head_dropout=0 --patch_len=16 --stride=8 --des='Exp' --train_epochs=100 --patience=20 --itr=1 --batch_size=128 --learning_rate=0.0001 \
-			--block_size=$$block_size --w_elem_format=$$elem_format --a_elem_format=$$elem_format; \
+	for pred_len in 720; do \
+		for block_size in 16; do \
+			for elem_format in int4; do \
+				for acc_bits in 0; do \
+				python -u run.py --random_seed=2021 --is_training=0 --root_path=./dataset/ --data_path=weather.csv --model_id=$${model_id_name}_$${seq_len}_$$pred_len --model=$$model_name --data=custom --features=M --seq_len=$${seq_len} --pred_len=$$pred_len --enc_in=21 --e_layers=3 --n_heads=16 --d_model=128 --d_ff=256 --dropout=0.2 --fc_dropout=0.2 --head_dropout=0 --patch_len=16 --stride=8 --des='Exp' --train_epochs=100 --patience=20 --itr=1 --batch_size=128 --learning_rate=0.0001 \
+				--block_size=$$block_size --w_elem_format=$$elem_format --a_elem_format=$$elem_format --acc_bits=$$acc_bits; \
+				done; \
 			done; \
 		done; \
 	done; \
@@ -61,3 +63,6 @@ electricity:
 
 test:
 	python test.py
+
+mac:
+	python mycode/explore_cuda_MAC.py
