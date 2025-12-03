@@ -1,4 +1,5 @@
 import argparse
+import functools
 import os
 import torch
 from exp.exp_main import Exp_Main
@@ -7,7 +8,7 @@ import numpy as np
 
 from mx import mxLinear
 from mx.quant_mx_specs import set_mx_specs
-
+from mycode.globalVar import save_tensors
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Autoformer & Transformer family for Time Series Forecasting')
 
@@ -119,12 +120,25 @@ if __name__ == '__main__':
     print('Args in experiment:')
     print(args)
 
+
+    def stat_input_hook(m, x, y, name, module):
+        # if isinstance(x, tuple):
+        #     x = x[0]
+        with open(f'process_flow.txt', 'a') as f:
+            f.write(f"{name}\n")
+
     Exp = Exp_Main
     exp = Exp(args)
     # print(exp.model)
     # for name, param in exp.model.named_parameters():
     #     print(name, param.dtype)
     # exit()
+    # hooks = []
+    # for name, m in exp.model.named_modules():
+    #     # if isinstance(m, nn.Linear):
+    #     hooks.append(
+    #         m.register_forward_hook(functools.partial(stat_input_hook, name=name, module=m))
+    #     )
 
     def _set_module(model, submodule_key, module):
         tokens = submodule_key.split('.')
@@ -135,11 +149,10 @@ if __name__ == '__main__':
         setattr(cur_mod, tokens[-1], module)
     mx_specs = set_mx_specs(block_size=args.block_size, w_elem_format=args.w_elem_format, a_elem_format=args.a_elem_format, acc_bits=args.acc_bits)
 
-    if args.block_size:
-        for name, module in exp.model.named_modules():
-            if isinstance(module, torch.nn.Linear):
-                new_layer = mxLinear.set_param(module, mx_specs=mx_specs, name=name)
-                _set_module(exp.model, name, new_layer)
+    for name, module in exp.model.named_modules():
+        if isinstance(module, torch.nn.Linear):
+            new_layer = mxLinear.set_param(module, mx_specs=mx_specs, name=name)
+            _set_module(exp.model, name, new_layer)
 
     if args.is_training:
         for ii in range(args.itr):
@@ -196,7 +209,7 @@ if __name__ == '__main__':
         print('>>>>>>>testing : {}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(setting))
         # with open('model_structure.txt', 'w') as f:
         #     f.write(str(exp.model))
-        mse, mae = exp.test(setting, test=1)
+        mse, mae = exp.test(setting, test=1, samples=1)
         torch.cuda.empty_cache()
 
         print('MSE: {}, MAE: {}'.format(mse, mae))
@@ -204,3 +217,5 @@ if __name__ == '__main__':
             f.write(f"mse:{mse:.20f}, mae:{mae:.6f}, mx_specs:{mx_specs['block_size']},{mx_specs['w_elem_format']}, {args.acc_bits}")
             f.write('\n')
         
+
+    save_tensors(dir=f'save_tensors')

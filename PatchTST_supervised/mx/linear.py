@@ -12,7 +12,7 @@ from .specs import apply_mx_specs, get_backwards_mx_specs
 from .specs import mx_assert_test
 from .matmul_precision import set_matmul_precision
 
-from mycode.globalVar import increas_counter, get_counter
+from mycode.globalVar import increas_counter, get_counter, append_activation
 
 f_linear = F.linear
 torch_matmul = torch.matmul
@@ -366,7 +366,10 @@ class mxLinear(torch.nn.Linear):
         self.prequantized_weights = True
 
     def forward(self, inputs):
-        if self.mx_none:
+        # if self.mx_none:
+        if self.mx_specs['block_size'] == 0:
+            print(self.name, inputs.shape)
+            append_activation(self.name, inputs)
             return super().forward(inputs)
         
         if self.prequantized_weights:

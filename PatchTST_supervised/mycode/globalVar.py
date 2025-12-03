@@ -26,7 +26,7 @@ def append_weight(k, v):
 def save_tensors(dir=None):
     global activations_save
     global weights_save
-    activations_save = {k: v.clone().cpu() for k, v in activations_save.items()}
+    activations_save = {k: v.contiguous().clone().cpu() for k, v in activations_save.items()}
     with open(f'{dir}/activation_key.py', 'w') as f:
         f.writelines(f"act_keys = [")
         for k in activations_save.keys():
