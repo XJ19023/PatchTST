@@ -98,8 +98,10 @@ if __name__ == '__main__':
 
     parser.add_argument('--w_elem_format', type=str, default='int4', help='gpu')
     parser.add_argument('--a_elem_format', type=str, default='int4', help='gpu')
-    parser.add_argument('--block_size', type=int, default=0, help='gpu')
-    parser.add_argument('--acc_bits', type=int, default=0, help='gpu')
+    parser.add_argument('--block_size', type=int, default=0, help='0 means no quantization')
+    parser.add_argument('--acc_bits', type=int, default=0, help='0 means default accumulation bits')
+    parser.add_argument('--n_samples', type=int, default=0, help='test samples, 0 means full samples')
+    parser.add_argument('--hook', action='store_true', default=False, help='registe hooks')
     args = parser.parse_args()
 
     # random seed
@@ -125,7 +127,7 @@ if __name__ == '__main__':
         # if isinstance(x, tuple):
         #     x = x[0]
         with open(f'process_flow.txt', 'a') as f:
-            f.write(f"{name}\n")
+            f.write(f"{name} {m}\n")
 
     Exp = Exp_Main
     exp = Exp(args)
@@ -139,6 +141,13 @@ if __name__ == '__main__':
     #     hooks.append(
     #         m.register_forward_hook(functools.partial(stat_input_hook, name=name, module=m))
     #     )
+    if args.hook:
+        hooks = []
+        for name, module in exp.model.named_modules():
+            # if isinstance(module, nn.Linear):
+            hooks.append(
+                module.register_forward_hook(functools.partial(stat_input_hook, name=name))
+            )
 
     def _set_module(model, submodule_key, module):
         tokens = submodule_key.split('.')
@@ -209,7 +218,7 @@ if __name__ == '__main__':
         print('>>>>>>>testing : {}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(setting))
         # with open('model_structure.txt', 'w') as f:
         #     f.write(str(exp.model))
-        mse, mae = exp.test(setting, test=1, samples=1)
+        mse, mae = exp.test(setting, test=1, n_samples=args.n_samples)
         torch.cuda.empty_cache()
 
         print('MSE: {}, MAE: {}'.format(mse, mae))
@@ -218,4 +227,4 @@ if __name__ == '__main__':
             f.write('\n')
         
 
-    save_tensors(dir=f'save_tensors')
+    # save_tensors(dir=f'save_tensors')

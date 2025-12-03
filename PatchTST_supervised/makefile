@@ -9,7 +9,7 @@ debug:
 	seq_len=336; \
 	model_name=PatchTST; \
 	model_id_name=weather; \
-	for pred_len in 720; do \
+	for pred_len in 96; do \
 		for block_size in 0; do \
 			for elem_format in int4; do \
 				for acc_bits in 0; do \

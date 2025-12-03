@@ -369,7 +369,7 @@ class mxLinear(torch.nn.Linear):
         # if self.mx_none:
         if self.mx_specs['block_size'] == 0:
             print(self.name, inputs.shape)
-            append_activation(self.name, inputs)
+            # append_activation(self.name, inputs)
             return super().forward(inputs)
         
         if self.prequantized_weights:

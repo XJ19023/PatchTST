@@ -216,7 +216,7 @@ class Exp_Main(Exp_Basic):
 
         return self.model
 
-    def test(self, setting, test=0, samples=None):
+    def test(self, setting, test=0, n_samples=None):
         test_data, test_loader = self._get_data(flag='test')
         
         if test:
@@ -233,7 +233,7 @@ class Exp_Main(Exp_Basic):
         self.model.eval()
         with torch.no_grad():
             for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(test_loader):
-                if samples and i == samples:
+                if n_samples and i == n_samples:
                     break
                 batch_x = batch_x.float().to(self.device)
                 batch_y = batch_y.float().to(self.device)
