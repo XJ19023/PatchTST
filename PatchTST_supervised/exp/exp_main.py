@@ -219,10 +219,6 @@ class Exp_Main(Exp_Basic):
     def test(self, setting, test=0, n_samples=None):
         test_data, test_loader = self._get_data(flag='test')
         
-        if test:
-            print('loading model')
-            self.model.load_state_dict(torch.load(os.path.join('./checkpoints/' + setting, 'checkpoint.pth')))
-
         preds = []
         trues = []
         inputx = []

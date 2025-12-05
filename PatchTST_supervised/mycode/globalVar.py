@@ -15,6 +15,13 @@ def get_counter():
     return true_counter, false_counter
 
 
+smooth_factor = {}
+def append_smooth_factor(k, v):
+    global smooth_factor
+    smooth_factor[f'{k}'] = v.detach().cpu()
+def get_smooth_factor():
+    global smooth_factor
+    return smooth_factor
 activations_save = {}
 weights_save = {}
 def append_activation(k, v):

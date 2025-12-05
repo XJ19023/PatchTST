@@ -1,11 +1,14 @@
 import argparse
 import functools
 import os
+import sys
+sys.path.append('.')
 import torch
 from exp.exp_main import Exp_Main
 import random
 import numpy as np
 
+from mysmoothquant.fake_quant import W8A8Linear, quantize_model
 from mx import mxLinear
 from mx.quant_mx_specs import set_mx_specs
 from mycode.globalVar import save_tensors
@@ -102,6 +105,11 @@ if __name__ == '__main__':
     parser.add_argument('--acc_bits', type=int, default=0, help='0 means default accumulation bits')
     parser.add_argument('--n_samples', type=int, default=0, help='test samples, 0 means full samples')
     parser.add_argument('--hook', action='store_true', default=False, help='registe hooks')
+    parser.add_argument('--smooth', action='store_true', default=False, help='registe hooks')
+    parser.add_argument('--alpha', type=float, default=0.5, help='test samples, 0 means full samples')
+    parser.add_argument('--mxquant', action='store_true', default=False, help='registe hooks')
+    parser.add_argument('--intquant', action='store_true', default=False, help='registe hooks')
+    parser.add_argument('--n_bits', type=int, default=8, help='test samples, 0 means full samples')
     args = parser.parse_args()
 
     # random seed
@@ -121,6 +129,7 @@ if __name__ == '__main__':
 
     print('Args in experiment:')
     print(args)
+    loggings = ''
 
 
     def stat_input_hook(module, x, y, name):
@@ -133,6 +142,33 @@ if __name__ == '__main__':
     Exp = Exp_Main
     exp = Exp(args)
 
+    ii = 0
+    print('>>>>>>>testing : {}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(args.model_id))
+    setting = '{}_{}_{}_ft{}_sl{}_ll{}_pl{}_dm{}_nh{}_el{}_dl{}_df{}_fc{}_eb{}_dt{}_{}_{}'.format(args.model_id,
+                                                                                                args.model,
+                                                                                                args.data,
+                                                                                                args.features,
+                                                                                                args.seq_len,
+                                                                                                args.label_len,
+                                                                                                args.pred_len,
+                                                                                                args.d_model,
+                                                                                                args.n_heads,
+                                                                                                args.e_layers,
+                                                                                                args.d_layers,
+                                                                                                args.d_ff,
+                                                                                                args.factor,
+                                                                                                args.embed,
+                                                                                                args.distil,
+                                                                                                args.des, ii)
+
+    print('loading model')
+    exp.model.load_state_dict(torch.load(os.path.join('./checkpoints/' + setting, 'checkpoint.pth')))
+    if args.smooth:
+        loggings = f'alpha={args.alpha}, '
+        from mysmoothquant.smooth import smooth_lm
+        act_scales = torch.load('act_scales/patchTST.pt')
+        smooth_lm(exp.model, act_scales, args.alpha)
+
     def _set_module(model, submodule_key, module):
         tokens = submodule_key.split('.')
         sub_tokens = tokens[:-1]
@@ -140,13 +176,25 @@ if __name__ == '__main__':
         for s in sub_tokens:
             cur_mod = getattr(cur_mod, s)
         setattr(cur_mod, tokens[-1], module)
-    mx_specs = set_mx_specs(block_size=args.block_size, w_elem_format=args.w_elem_format, a_elem_format=args.a_elem_format, acc_bits=args.acc_bits)
 
-    for name, module in exp.model.named_modules():
-        if isinstance(module, torch.nn.Linear):
-            new_layer = mxLinear.set_param(module, mx_specs=mx_specs, name=name)
-            _set_module(exp.model, name, new_layer)
-
+    if args.mxquant:
+        mx_specs = set_mx_specs(block_size=args.block_size, w_elem_format=args.w_elem_format, a_elem_format=args.a_elem_format, acc_bits=args.acc_bits)
+        loggings += f"mx_specs:{mx_specs['block_size']}, {mx_specs['w_elem_format']}, "
+        for name, module in exp.model.named_modules():
+            if isinstance(module, torch.nn.Linear):
+                new_layer = mxLinear.set_param(module, mx_specs=mx_specs, name=name)
+                _set_module(exp.model, name, new_layer)
+                
+    if args.intquant:
+        loggings += f'n_bits:{args.n_bits}, '
+        model = quantize_model(
+            exp.model,
+            weight_quant="per_channel",
+            act_quant="per_token",
+            quantize_bmm_input=False,
+            n_bits = args.n_bits,
+        )
+            
     if args.hook:
         hooks = []
         for name, module in exp.model.named_modules():
@@ -155,69 +203,14 @@ if __name__ == '__main__':
                     module.register_forward_hook(functools.partial(stat_input_hook, name=name))
                 )
 
-    if args.is_training:
-        for ii in range(args.itr):
-            # setting record of experiments
-            setting = '{}_{}_{}_ft{}_sl{}_ll{}_pl{}_dm{}_nh{}_el{}_dl{}_df{}_fc{}_eb{}_dt{}_{}_{}'.format(
-                args.model_id,
-                args.model,
-                args.data,
-                args.features,
-                args.seq_len,
-                args.label_len,
-                args.pred_len,
-                args.d_model,
-                args.n_heads,
-                args.e_layers,
-                args.d_layers,
-                args.d_ff,
-                args.factor,
-                args.embed,
-                args.distil,
-                args.des,ii)
+    print('>>>>>>>testing : {}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(setting))
+    mse, mae = exp.test(setting, test=1, n_samples=args.n_samples)
+    torch.cuda.empty_cache()
 
-            print('>>>>>>>start training : {}>>>>>>>>>>>>>>>>>>>>>>>>>>'.format(setting))
-            exp.train(setting)
-
-            print('>>>>>>>testing : {}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(setting))
-            exp.test(setting)
-
-            if args.do_predict:
-                print('>>>>>>>predicting : {}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(setting))
-                exp.predict(setting, True)
-
-            torch.cuda.empty_cache()
-    else:
-        ii = 0
-        print('>>>>>>>testing : {}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(args.model_id))
-        setting = '{}_{}_{}_ft{}_sl{}_ll{}_pl{}_dm{}_nh{}_el{}_dl{}_df{}_fc{}_eb{}_dt{}_{}_{}'.format(args.model_id,
-                                                                                                    args.model,
-                                                                                                    args.data,
-                                                                                                    args.features,
-                                                                                                    args.seq_len,
-                                                                                                    args.label_len,
-                                                                                                    args.pred_len,
-                                                                                                    args.d_model,
-                                                                                                    args.n_heads,
-                                                                                                    args.e_layers,
-                                                                                                    args.d_layers,
-                                                                                                    args.d_ff,
-                                                                                                    args.factor,
-                                                                                                    args.embed,
-                                                                                                    args.distil,
-                                                                                                    args.des, ii)
-        print('loading model')
-        exp.model.load_state_dict(torch.load(os.path.join('./checkpoints/' + setting, 'checkpoint.pth')))
-        print('>>>>>>>testing : {}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(setting))
-        # with open('model_structure.txt', 'w') as f:
-        #     f.write(str(exp.model))
-        mse, mae = exp.test(setting, test=1, n_samples=args.n_samples)
-        torch.cuda.empty_cache()
-
-        print('MSE: {}, MAE: {}'.format(mse, mae))
-        with open(f"logs/{args.model_id}.txt", 'a') as f:
-            f.write(f"mse:{mse:.20f}, mae:{mae:.6f}, mx_specs:{mx_specs['block_size']},{mx_specs['w_elem_format']}, {args.acc_bits}")
-            f.write('\n')
+    print('MSE: {}, MAE: {}'.format(mse, mae))
+    with open(f"logs/{args.model_id}.txt", 'a') as f:
+        f.write(f"mse:{mse:.20f}, mae:{mae:.6f}, {loggings}")
+        f.write('\n')
         
 
     # save_tensors(dir=f'save_tensors')

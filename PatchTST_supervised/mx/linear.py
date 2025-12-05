@@ -12,7 +12,7 @@ from .specs import apply_mx_specs, get_backwards_mx_specs
 from .specs import mx_assert_test
 from .matmul_precision import set_matmul_precision
 
-from mycode.globalVar import increas_counter, get_counter, append_activation
+from mycode.globalVar import increas_counter, get_counter, get_smooth_factor
 
 f_linear = F.linear
 torch_matmul = torch.matmul
@@ -95,6 +95,11 @@ class LinearFunction(torch.autograd.Function):
         prequantized_weights=False,
         name=None,
     ):
+        smooth_factor = get_smooth_factor()
+        for k, v in smooth_factor.items():
+            if name.endswith(('W_Q', 'W_K', 'W_V')):
+                # print(input.shape, smooth_factor[name[:31]].shape)
+                input.div_(smooth_factor[name[:31]].view(1, -1).to(device=input.device))
         # element-wise quantize for input
         bf_in = quantize_elemwise_op(
             input, mx_specs=mx_specs, round=mx_specs["round_output"]
@@ -368,7 +373,7 @@ class mxLinear(torch.nn.Linear):
     def forward(self, inputs):
         # if self.mx_none:
         if self.mx_specs['block_size'] == 0:
-            print(self.name, inputs.shape)
+            # print(self.name, inputs.shape)
             # append_activation(self.name, inputs)
             return super().forward(inputs)
         
