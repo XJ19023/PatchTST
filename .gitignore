@@ -473,4 +473,5 @@ $RECYCLE.BIN/
 **/test_results/**
 **/dataset/**
 **/result.txt
+**/**.pt
 **/model_structure.txt

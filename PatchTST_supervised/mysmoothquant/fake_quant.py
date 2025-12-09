@@ -108,12 +108,14 @@ class W8A8Linear(nn.Module):
     def forward(self, x):
 
         smooth_factor = get_smooth_factor()
-        key = 'model.' + self.name
+        x_t = None
         if self.name.endswith(('W_Q', 'W_K', 'W_V')):
+            key = 'model.' + self.name
             # print(input.shape, smooth_factor[name[:31]].shape)
-            x.div_(smooth_factor[key[:31]].view(1, -1).to(device=x.device))
+            # x.div_(smooth_factor[key[:31]].view(1, -1).to(device=x.device))
+            x_t = x / smooth_factor[key[:31]].view(1, -1).to(device=x.device)
 
-        q_x = self.act_quant(x)
+        q_x = self.act_quant(x_t if x_t is not None else x)
         y = torch.functional.F.linear(q_x, self.weight, self.bias)
         q_y = self.output_quant(y)
         return q_y

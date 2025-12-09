@@ -47,7 +47,7 @@ smooth_int:
 	model_name=PatchTST; \
 	model_id_name=weather; \
 	for pred_len in 96; do \
-		for alpha in 0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0; do \
+		for alpha in 0.9; do \
 			python -u mysmoothquant/run_smooth.py --random_seed=2021 --is_training=0 --root_path=./dataset/ --data_path=weather.csv --model_id=$${model_id_name}_$${seq_len}_$$pred_len --model=$$model_name --data=custom --features=M --seq_len=$${seq_len} --pred_len=$$pred_len --enc_in=21 --e_layers=3 --n_heads=16 --d_model=128 --d_ff=256 --dropout=0.2 --fc_dropout=0.2 --head_dropout=0 --patch_len=16 --stride=8 --des='Exp' --train_epochs=100 --patience=20 --itr=1 --batch_size=128 --learning_rate=0.0001 \
 			--intquant --n_bits=8 --smooth --alpha=$$alpha \
 			; \
