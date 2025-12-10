@@ -55,12 +55,14 @@ class W8A8Linear(nn.Module):
         act_quant="per_token",
         quantize_output=False,
         n_bits=None,
-        name=None
+        name=None,
+        smooth_module=None
     ):
         super().__init__()
         self.in_features = in_features
         self.out_features = out_features
         self.name = name
+        self.smooth_module = smooth_module
 
         self.register_buffer(
             "weight",
@@ -109,11 +111,14 @@ class W8A8Linear(nn.Module):
 
         smooth_factor = get_smooth_factor()
         x_t = None
-        if self.name.endswith(('W_Q', 'W_K', 'W_V')):
+        key=None
+        if 'qkv' in self.smooth_module and self.name.endswith(('W_Q', 'W_K', 'W_V')):
+            key = 'model.' + self.name[:35] + '.W_Q'
+        if self.name.endswith(tuple(self.smooth_module)): 
             key = 'model.' + self.name
-            # print(input.shape, smooth_factor[name[:31]].shape)
-            # x.div_(smooth_factor[key[:31]].view(1, -1).to(device=x.device))
-            x_t = x / smooth_factor[key[:31]].view(1, -1).to(device=x.device)
+        if key is not None:
+            x_t = x / smooth_factor[key].view(1, -1).to(device=x.device)
+
 
         q_x = self.act_quant(x_t if x_t is not None else x)
         y = torch.functional.F.linear(q_x, self.weight, self.bias)
@@ -122,7 +127,7 @@ class W8A8Linear(nn.Module):
 
     @staticmethod
     def from_float(
-        module, weight_quant="per_channel", act_quant="per_token", quantize_output=False, n_bits=None, name=None
+        module, weight_quant="per_channel", act_quant="per_token", quantize_output=False, n_bits=None, name=None, smooth_module=None
     ):
         assert isinstance(module, torch.nn.Linear)
         new_module = W8A8Linear(
@@ -133,6 +138,7 @@ class W8A8Linear(nn.Module):
             quantize_output=quantize_output,
             n_bits=n_bits,
             name=name,
+            smooth_module=smooth_module,
         )
         if weight_quant == "per_channel":
             new_module.weight = quantize_weight_per_channel_absmax(
@@ -244,7 +250,7 @@ def quantize_llama_like(
             )
     return model
 def quantize_PatchTST(
-    model, weight_quant="per_channel", act_quant="per_token", quantize_bmm_input=False, n_bits=None
+    model, weight_quant="per_channel", act_quant="per_token", quantize_bmm_input=False, n_bits=None, smooth_module=None
 ):
     from layers.PatchTST_backbone import _MultiheadAttention as PatchTSTAttention
     from layers.PatchTST_backbone import TSTEncoderLayer as PatchTSTff
@@ -252,10 +258,10 @@ def quantize_PatchTST(
     for name, m in model.model.named_modules():
         if isinstance(m, PatchTSTff):
             m.ff[0] = W8A8Linear.from_float(
-                m.ff[0], weight_quant=weight_quant, act_quant=act_quant, n_bits=n_bits, name=name+'.ff.0'
+                m.ff[0], weight_quant=weight_quant, act_quant=act_quant, n_bits=n_bits, name=name+'.ff.0', smooth_module=smooth_module
             )
             m.ff[3] = W8A8Linear.from_float(
-                m.ff[3], weight_quant=weight_quant, act_quant=act_quant, n_bits=n_bits, name=name+'.ff.3'
+                m.ff[3], weight_quant=weight_quant, act_quant=act_quant, n_bits=n_bits, name=name+'.ff.3', smooth_module=smooth_module
             )
         elif isinstance(m, PatchTSTAttention):
             # Her we simulate quantizing BMM inputs by quantizing the output of q_proj, k_proj, v_proj
@@ -265,7 +271,8 @@ def quantize_PatchTST(
                 act_quant=act_quant,
                 quantize_output=quantize_bmm_input,
                 n_bits=n_bits,
-                name=name+'.W_Q'
+                name=name+'.W_Q',
+                smooth_module = smooth_module
             )
             m.W_K = W8A8Linear.from_float(
                 m.W_K,
@@ -273,7 +280,8 @@ def quantize_PatchTST(
                 act_quant=act_quant,
                 quantize_output=quantize_bmm_input,
                 n_bits=n_bits,
-                name=name+'.W_K'
+                name=name+'.W_K',
+                smooth_module = smooth_module
             )
             m.W_V = W8A8Linear.from_float(
                 m.W_V,
@@ -281,10 +289,11 @@ def quantize_PatchTST(
                 act_quant=act_quant,
                 quantize_output=quantize_bmm_input,
                 n_bits=n_bits,
-                name=name+'.W_V'
+                name=name+'.W_V',
+                smooth_module = smooth_module
             )
             m.to_out[0] = W8A8Linear.from_float(
-                m.to_out[0], weight_quant=weight_quant, act_quant=act_quant, n_bits=n_bits, name=name+'.to_out'
+                m.to_out[0], weight_quant=weight_quant, act_quant=act_quant, n_bits=n_bits, name=name+'.to_out', smooth_module=smooth_module
             )
     return model
 
@@ -370,7 +379,7 @@ def quantize_falcon(
 
 
 def quantize_model(
-    model, weight_quant="per_channel", act_quant="per_token", quantize_bmm_input=False, n_bits=None
+    model, weight_quant="per_channel", act_quant="per_token", quantize_bmm_input=False, n_bits=None, smooth_module=None
 ):
     from transformers.models.opt.modeling_opt import OPTPreTrainedModel
     from transformers.models.llama.modeling_llama import LlamaPreTrainedModel
@@ -414,6 +423,7 @@ def quantize_model(
             act_quant=act_quant,
             quantize_bmm_input=quantize_bmm_input,
             n_bits = n_bits,
+            smooth_module = smooth_module,
         )
     else:
         raise ValueError(f"Unsupported model type: {type(model)}")

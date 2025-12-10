@@ -1,7 +1,14 @@
-import torch
-tensor = torch.load('act_scales/patchTST.pt')
-# print(type(tensor))
-file_handle = open('logs/act_patchTST.txt', 'w')
-for k, v in tensor.items():
-    print(f'{k:<25} {v.shape}', file=file_handle)
-file_handle.close()
+import argparse
+
+parser = argparse.ArgumentParser()
+parser.add_argument(
+    '--smooth_module',
+    nargs='+',
+    default=['qkv', 'to_out', 'ff.0', 'ff.3'],
+    help='Modules to apply smooth'
+)
+parser.add_argument('--random_seed', type=int, default=2021, help='random seed')
+args = parser.parse_args()
+
+print(args.smooth_module)
+print(args.random_seed)

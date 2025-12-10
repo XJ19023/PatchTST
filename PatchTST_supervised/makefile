@@ -44,15 +44,33 @@ smooth_mx:
 smooth_int:
 	@start=$$(date +%s); \
 	seq_len=336; \
+	pred_len=720; \
 	model_name=PatchTST; \
 	model_id_name=weather; \
-	for pred_len in 96; do \
+	fixed="--random_seed=2021 --is_training=0 --root_path=./dataset/ --data_path=weather.csv --model_id=$${model_id_name}_$${seq_len}_$$pred_len --model=$$model_name --data=custom --features=M --seq_len=$${seq_len} --pred_len=$$pred_len --enc_in=21 --e_layers=3 --n_heads=16 --d_model=128 --d_ff=256 --dropout=0.2 --fc_dropout=0.2 --head_dropout=0 --patch_len=16 --stride=8 --des=Exp --train_epochs=100 --patience=20 --itr=1 --batch_size=128 --learning_rate=0.0001"; \
+	for smooth_module in "qkv" "to_out" "ff.0" "ff.3" "qkv to_out ff.0 ff.3"; do \
 		for alpha in 0.9; do \
-			python -u mysmoothquant/run_smooth.py --random_seed=2021 --is_training=0 --root_path=./dataset/ --data_path=weather.csv --model_id=$${model_id_name}_$${seq_len}_$$pred_len --model=$$model_name --data=custom --features=M --seq_len=$${seq_len} --pred_len=$$pred_len --enc_in=21 --e_layers=3 --n_heads=16 --d_model=128 --d_ff=256 --dropout=0.2 --fc_dropout=0.2 --head_dropout=0 --patch_len=16 --stride=8 --des='Exp' --train_epochs=100 --patience=20 --itr=1 --batch_size=128 --learning_rate=0.0001 \
-			--intquant --n_bits=8 --smooth --alpha=$$alpha \
+			python -u mysmoothquant/run_smooth.py $$fixed \
+			--intquant --n_bits=4 --smooth --alpha=$$alpha \
+			--smooth_module "$$smooth_module" \
 			; \
 		done; \
 	done; \
+	end=$$(date +%s); \
+	delta=$$((end - start)); \
+	hours=$$((delta / 3600)); \
+	minutes=$$(((delta % 3600) / 60)); \
+	echo "\e[36mTime elapsed: $${hours}h-$${minutes}m\e[0m"
+org:
+	@start=$$(date +%s); \
+	seq_len=336; \
+	pred_len=720; \
+	model_name=PatchTST; \
+	model_id_name=weather; \
+	fixed="--random_seed=2021 --is_training=0 --root_path=./dataset/ --data_path=weather.csv --model_id=$${model_id_name}_$${seq_len}_$$pred_len --model=$$model_name --data=custom --features=M --seq_len=$${seq_len} --pred_len=$$pred_len --enc_in=21 --e_layers=3 --n_heads=16 --d_model=128 --d_ff=256 --dropout=0.2 --fc_dropout=0.2 --head_dropout=0 --patch_len=16 --stride=8 --des=Exp --train_epochs=100 --patience=20 --itr=1 --batch_size=128 --learning_rate=0.0001"; \
+	python -u mysmoothquant/run_smooth.py $$fixed \
+	--intquant --n_bits=4 \
+	; \
 	end=$$(date +%s); \
 	delta=$$((end - start)); \
 	hours=$$((delta / 3600)); \
@@ -112,7 +130,8 @@ electricity:
 	echo "\e[36mTime elapsed: $${hours}h-$${minutes}m\e[0m"
 
 test:
-	python test.py
+	python test.py --smooth_module qkv to_out ff.0 ff.3 --random_seed=1
+
 data:
 	python mycode/data_process.py
 

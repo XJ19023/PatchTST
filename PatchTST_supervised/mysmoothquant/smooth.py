@@ -94,13 +94,15 @@ def smooth_ln_fcs_patchTST(ln, fcs, act_scales, alpha=0.5, name=None):
     )
     append_smooth_factor(name, scales)
 
-    # ln.weight.div_(scales)
+    if ln is not None:
+        ln.weight.div_(scales)
+        ln.bias.div_(scales)
     for fc in fcs:
         fc.weight.mul_(scales.view(1, -1))
 
 
 @torch.no_grad()
-def smooth_lm(model, scales, alpha=0.5):
+def smooth_lm(model, scales, alpha=0.5, smooth_module=None):
     for name, module in model.named_modules():
         if isinstance(module, OPTDecoderLayer):
             attn_ln = module.self_attn_layer_norm
@@ -135,13 +137,28 @@ def smooth_lm(model, scales, alpha=0.5):
 
         elif isinstance(module, TSTEncoderLayer):
             # attn_ln = module.input_layernorm  # attention forward norm
-            qkv = [
-                module.self_attn.W_Q,
-                module.self_attn.W_K,
-                module.self_attn.W_V,
-            ]
+            if 'qkv' in smooth_module:
+                qkv = [
+                    module.self_attn.W_Q,
+                    module.self_attn.W_K,
+                    module.self_attn.W_V,
+                ]
 
-            qkv_input_scales = scales[name + ".self_attn.W_Q"]
-            # print('====', qkv_input_scales.shape)
-            smooth_ln_fcs_patchTST(None, qkv, qkv_input_scales, alpha, name)
+                qkv_input_scales = scales[name+".self_attn.W_Q"]
+                smooth_ln_fcs_patchTST(None, qkv, qkv_input_scales, alpha, name+".self_attn.W_Q")
+
+            if 'to_out' in smooth_module:
+                fcs = [module.self_attn.to_out[0]]
+                fcs_input_scales = scales[name + ".self_attn.to_out.0"]
+                smooth_ln_fcs_patchTST(None, fcs, fcs_input_scales, alpha, name + ".self_attn.to_out")
+
+            if 'ff.0' in smooth_module:
+                fcs = [module.ff[0]]
+                fcs_input_scales = scales[name+".ff.0"]
+                smooth_ln_fcs_patchTST(None, fcs, fcs_input_scales, alpha, name+".ff.0")
+
+            if 'ff.3' in smooth_module:
+                fcs = [module.ff[3]]
+                fcs_input_scales = scales[name+".ff.3"]
+                smooth_ln_fcs_patchTST(None, fcs, fcs_input_scales, alpha, name+".ff.3")
             # print('==========', name)

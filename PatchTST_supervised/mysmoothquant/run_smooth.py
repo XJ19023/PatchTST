@@ -12,6 +12,7 @@ from mysmoothquant.fake_quant import W8A8Linear, quantize_model
 from mx import mxLinear
 from mx.quant_mx_specs import set_mx_specs
 from mycode.globalVar import save_tensors
+import transformers.models.llama.modeling_llama
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Autoformer & Transformer family for Time Series Forecasting')
 
@@ -110,6 +111,18 @@ if __name__ == '__main__':
     parser.add_argument('--mxquant', action='store_true', default=False, help='registe hooks')
     parser.add_argument('--intquant', action='store_true', default=False, help='registe hooks')
     parser.add_argument('--n_bits', type=int, default=8, help='test samples, 0 means full samples')
+    parser.add_argument(
+    '--smooth_module',
+    type=str,
+    default='qkv',
+    help='Modules to apply smooth'
+)
+#     parser.add_argument(
+#     '--smooth_module',
+#     nargs='+',
+#     default=['qkv', 'to_out', 'ff.0', 'ff.3'],
+#     help='Modules to apply smooth'
+# )
     args = parser.parse_args()
 
     # random seed
@@ -163,11 +176,13 @@ if __name__ == '__main__':
 
     print('loading model')
     exp.model.load_state_dict(torch.load(os.path.join('./checkpoints/' + setting, 'checkpoint.pth')))
+    smooth_module = []
     if args.smooth:
-        loggings = f'alpha={args.alpha}, '
+        smooth_module = args.smooth_module.split()
+        loggings = f'alpha={args.alpha}, smooth_module={smooth_module}, '
         from mysmoothquant.smooth import smooth_lm
         act_scales = torch.load('act_scales/patchTST.pt')
-        smooth_lm(exp.model, act_scales, args.alpha)
+        smooth_lm(exp.model, act_scales, args.alpha, smooth_module)
 
     def _set_module(model, submodule_key, module):
         tokens = submodule_key.split('.')
@@ -186,13 +201,14 @@ if __name__ == '__main__':
                 _set_module(exp.model, name, new_layer)
                 
     if args.intquant:
-        loggings += f'n_bits:{args.n_bits}, '
+        loggings += f'intquant:{args.n_bits}, '
         model = quantize_model(
             exp.model,
             weight_quant="per_channel",
             act_quant="per_token",
             quantize_bmm_input=False,
             n_bits = args.n_bits,
+            smooth_module = smooth_module,
         )
             
     if args.hook:
@@ -209,7 +225,7 @@ if __name__ == '__main__':
 
     print('MSE: {}, MAE: {}'.format(mse, mae))
     with open(f"logs/{args.model_id}.txt", 'a') as f:
-        f.write(f"mse:{mse:.20f}, mae:{mae:.6f}, {loggings}")
+        f.write(f"mse:{mse:.8}, mae:{mae:.6f}, {loggings}")
         f.write('\n')
         
 
