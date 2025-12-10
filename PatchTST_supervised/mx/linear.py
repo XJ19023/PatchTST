@@ -95,11 +95,6 @@ class LinearFunction(torch.autograd.Function):
         prequantized_weights=False,
         name=None,
     ):
-        smooth_factor = get_smooth_factor()
-        for k, v in smooth_factor.items():
-            if name.endswith(('W_Q', 'W_K', 'W_V')):
-                # print(input.shape, smooth_factor[name[:31]].shape)
-                input.div_(smooth_factor[name[:31]].view(1, -1).to(device=input.device))
         # element-wise quantize for input
         bf_in = quantize_elemwise_op(
             input, mx_specs=mx_specs, round=mx_specs["round_output"]
@@ -307,17 +302,19 @@ class mxLinear(torch.nn.Linear):
         bias=True,
         mx_specs=None,
         name=None,
+        smooth_module=None,
     ):
         mx_assert_test(mx_specs)
         self.mx_none = mx_specs is None
 
         self.name = name
+        self.smooth_module = smooth_module
         self.prequantized_weights = False
         self.mx_specs = apply_mx_specs(mx_specs)
         super().__init__(in_features, out_features, bias)
 
     @staticmethod
-    def set_param(module, mx_specs, name,
+    def set_param(module, mx_specs, name, smooth_module
     ):
         assert isinstance(module, torch.nn.Linear)
         new_module = mxLinear(
@@ -326,6 +323,7 @@ class mxLinear(torch.nn.Linear):
             module.bias is not None,
             mx_specs=mx_specs,
             name=name,
+            smooth_module=smooth_module,
         )
         new_module.weight = torch.nn.Parameter(module.weight.data.clone())
         if module.bias is not None:
@@ -381,8 +379,18 @@ class mxLinear(torch.nn.Linear):
             assert(self.training == False), \
                 "Cannot use prequantized weights when training!"
 
+        smooth_factor = get_smooth_factor()
+        x_t = None
+        key=None
+        if 'qkv' in self.smooth_module and self.name.endswith(('W_Q', 'W_K', 'W_V')):
+            key = self.name[:41] + '.W_Q'
+        if self.name.endswith(tuple(self.smooth_module)): 
+            key = self.name
+        if key is not None:
+            x_t = inputs / smooth_factor[key].view(1, -1).to(device=inputs.device)
+
         return linear(
-            input=inputs,
+            input=x_t if x_t is not None else inputs,
             weight=self.weight,
             bias=self.bias,
             mx_specs=self.mx_specs,

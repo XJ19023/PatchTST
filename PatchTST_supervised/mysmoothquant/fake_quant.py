@@ -293,7 +293,7 @@ def quantize_PatchTST(
                 smooth_module = smooth_module
             )
             m.to_out[0] = W8A8Linear.from_float(
-                m.to_out[0], weight_quant=weight_quant, act_quant=act_quant, n_bits=n_bits, name=name+'.to_out', smooth_module=smooth_module
+                m.to_out[0], weight_quant=weight_quant, act_quant=act_quant, n_bits=n_bits, name=name+'.to_out.0', smooth_module=smooth_module
             )
     return model
 

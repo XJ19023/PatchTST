@@ -100,8 +100,8 @@ if __name__ == '__main__':
     parser.add_argument('--devices', type=str, default='0,1,2,3', help='device ids of multile gpus')
     parser.add_argument('--test_flop', action='store_true', default=False, help='See utils/tools for usage')
 
-    parser.add_argument('--w_elem_format', type=str, default='int4', help='gpu')
-    parser.add_argument('--a_elem_format', type=str, default='int4', help='gpu')
+    parser.add_argument('--w_elem_format', type=str, default='int8', help='gpu')
+    parser.add_argument('--a_elem_format', type=str, default='int8', help='gpu')
     parser.add_argument('--block_size', type=int, default=0, help='0 means no quantization')
     parser.add_argument('--acc_bits', type=int, default=0, help='0 means default accumulation bits')
     parser.add_argument('--n_samples', type=int, default=0, help='test samples, 0 means full samples')
@@ -179,7 +179,7 @@ if __name__ == '__main__':
     smooth_module = []
     if args.smooth:
         smooth_module = args.smooth_module.split()
-        loggings = f'alpha={args.alpha}, smooth_module={smooth_module}, '
+        loggings = f'smooth_module={smooth_module}, '
         from mysmoothquant.smooth import smooth_lm
         act_scales = torch.load('act_scales/patchTST.pt')
         smooth_lm(exp.model, act_scales, args.alpha, smooth_module)
@@ -197,7 +197,7 @@ if __name__ == '__main__':
         loggings += f"mx_specs:{mx_specs['block_size']}, {mx_specs['w_elem_format']}, "
         for name, module in exp.model.named_modules():
             if isinstance(module, torch.nn.Linear):
-                new_layer = mxLinear.set_param(module, mx_specs=mx_specs, name=name)
+                new_layer = mxLinear.set_param(module, mx_specs=mx_specs, name=name, smooth_module=smooth_module)
                 _set_module(exp.model, name, new_layer)
                 
     if args.intquant:
@@ -225,7 +225,7 @@ if __name__ == '__main__':
 
     print('MSE: {}, MAE: {}'.format(mse, mae))
     with open(f"logs/{args.model_id}.txt", 'a') as f:
-        f.write(f"mse:{mse:.8}, mae:{mae:.6f}, {loggings}")
+        f.write(f"mse:{mse:.8}, {loggings}")
         f.write('\n')
         
 

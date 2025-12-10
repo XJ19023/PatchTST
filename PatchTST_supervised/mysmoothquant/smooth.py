@@ -147,10 +147,10 @@ def smooth_lm(model, scales, alpha=0.5, smooth_module=None):
                 qkv_input_scales = scales[name+".self_attn.W_Q"]
                 smooth_ln_fcs_patchTST(None, qkv, qkv_input_scales, alpha, name+".self_attn.W_Q")
 
-            if 'to_out' in smooth_module:
+            if 'to_out.0' in smooth_module:
                 fcs = [module.self_attn.to_out[0]]
                 fcs_input_scales = scales[name + ".self_attn.to_out.0"]
-                smooth_ln_fcs_patchTST(None, fcs, fcs_input_scales, alpha, name + ".self_attn.to_out")
+                smooth_ln_fcs_patchTST(None, fcs, fcs_input_scales, alpha, name + ".self_attn.to_out.0")
 
             if 'ff.0' in smooth_module:
                 fcs = [module.ff[0]]
