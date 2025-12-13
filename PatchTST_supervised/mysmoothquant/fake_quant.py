@@ -31,6 +31,7 @@ def quantize_activation_per_token_absmax(t, n_bits=8):
     scales = t.abs().max(dim=-1, keepdim=True)[0]
     q_max = 2 ** (n_bits - 1) - 1
     scales.clamp_(min=1e-5).div_(q_max)
+    # print(t.div(scales).round_())
     t.div_(scales).round_().mul_(scales)
     return t
 
@@ -62,6 +63,7 @@ class W8A8Linear(nn.Module):
         self.in_features = in_features
         self.out_features = out_features
         self.name = name
+        self.n_bits = n_bits
         self.smooth_module = smooth_module
 
         self.register_buffer(
@@ -156,7 +158,7 @@ class W8A8Linear(nn.Module):
         return new_module
 
     def __repr__(self):
-        return f"W8A8Linear({self.in_features}, {self.out_features}, bias={self.bias is not None}, weight_quant={self.weight_quant_name}, act_quant={self.act_quant_name}, output_quant={self.output_quant_name})"
+        return f"W8A8Linear({self.in_features}, {self.out_features}, bias={self.bias is not None}, weight_quant={self.weight_quant_name}, act_quant={self.act_quant_name}, output_quant={self.output_quant_name}, INT{self.n_bits})"
 
 
 def quantize_opt(

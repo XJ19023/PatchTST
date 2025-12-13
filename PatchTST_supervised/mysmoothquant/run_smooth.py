@@ -202,7 +202,7 @@ if __name__ == '__main__':
                 
     if args.intquant:
         loggings += f'intquant:{args.n_bits}, '
-        model = quantize_model(
+        exp.model = quantize_model(
             exp.model,
             weight_quant="per_channel",
             act_quant="per_token",
@@ -219,6 +219,7 @@ if __name__ == '__main__':
                     module.register_forward_hook(functools.partial(stat_input_hook, name=name))
                 )
 
+    print(exp.model)
     print('>>>>>>>testing : {}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(setting))
     mse, mae = exp.test(setting, test=1, n_samples=args.n_samples)
     torch.cuda.empty_cache()
