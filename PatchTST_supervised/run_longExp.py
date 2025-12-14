@@ -165,9 +165,15 @@ if __name__ == '__main__':
                                                                                                     args.embed,
                                                                                                     args.distil,
                                                                                                     args.des, ii)
-
         exp = Exp(args)  # set experiments
+        print('loading model')
+        exp.model.load_state_dict(torch.load(os.path.join('./checkpoints/' + setting, 'checkpoint.pth')))
+
         print('>>>>>>>testing : {}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(setting))
-        exp.test(setting, test=1)
+        # exp.test(setting, test=1)
+        mse, mae = exp.test(setting, test=1)
+        torch.cuda.empty_cache()
+
+        print('MSE: {}, MAE: {}'.format(mse, mae))
         torch.cuda.empty_cache()
         

@@ -179,7 +179,7 @@ if __name__ == '__main__':
     smooth_module = []
     if args.smooth:
         smooth_module = args.smooth_module.split()
-        loggings = f'smooth_module={smooth_module}, '
+        loggings = f'smooth_module={smooth_module}, alpha={args.alpha}, '
         from mysmoothquant.smooth import smooth_lm
         act_scales = torch.load('act_scales/patchTST.pt')
         smooth_lm(exp.model, act_scales, args.alpha, smooth_module)
@@ -219,7 +219,7 @@ if __name__ == '__main__':
                     module.register_forward_hook(functools.partial(stat_input_hook, name=name))
                 )
 
-    print(exp.model)
+    # print(exp.model)
     print('>>>>>>>testing : {}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(setting))
     mse, mae = exp.test(setting, test=1, n_samples=args.n_samples)
     torch.cuda.empty_cache()
