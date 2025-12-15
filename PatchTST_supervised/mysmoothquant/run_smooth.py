@@ -11,7 +11,7 @@ import numpy as np
 from mysmoothquant.fake_quant import W8A8Linear, quantize_model
 from mx import mxLinear
 from mx.quant_mx_specs import set_mx_specs
-from mycode.globalVar import save_tensors
+from mycode.globalVar import save_tensors, increas_counter, get_counter, append_activation, save_tensors
 import transformers.models.llama.modeling_llama
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Autoformer & Transformer family for Time Series Forecasting')
@@ -148,7 +148,10 @@ if __name__ == '__main__':
     def stat_input_hook(module, x, y, name):
         if isinstance(x, tuple):
             x = x[0]
-        print(name, x.shape, module.weight.shape)
+        if name == 'model.backbone.encoder.layers.0.self_attn.W_Q':
+            increas_counter()
+        append_activation(f'case{get_counter()}_{name}', x)
+        # print(f'case{get_counter()}_{name}', x.shape, module.weight.shape)
         # with open(f'process_flow.txt', 'a') as f:
         #     f.write(f"{name} {m}\n")
 
@@ -184,15 +187,16 @@ if __name__ == '__main__':
         act_scales = torch.load('act_scales/patchTST.pt')
         smooth_lm(exp.model, act_scales, args.alpha, smooth_module)
 
-    def _set_module(model, submodule_key, module):
-        tokens = submodule_key.split('.')
-        sub_tokens = tokens[:-1]
-        cur_mod = model
-        for s in sub_tokens:
-            cur_mod = getattr(cur_mod, s)
-        setattr(cur_mod, tokens[-1], module)
 
     if args.mxquant:
+        def _set_module(model, submodule_key, module):
+            tokens = submodule_key.split('.')
+            sub_tokens = tokens[:-1]
+            cur_mod = model
+            for s in sub_tokens:
+                cur_mod = getattr(cur_mod, s)
+            setattr(cur_mod, tokens[-1], module)
+            
         mx_specs = set_mx_specs(block_size=args.block_size, w_elem_format=args.w_elem_format, a_elem_format=args.a_elem_format, acc_bits=args.acc_bits)
         loggings += f"mx_specs:{mx_specs['block_size']}, {mx_specs['w_elem_format']}, "
         for name, module in exp.model.named_modules():
@@ -214,7 +218,7 @@ if __name__ == '__main__':
     if args.hook:
         hooks = []
         for name, module in exp.model.named_modules():
-            if isinstance(module, torch.nn.Linear):
+            if isinstance(module, torch.nn.Linear) and 'head' not in name and 'W_P' not in name:
                 hooks.append(
                     module.register_forward_hook(functools.partial(stat_input_hook, name=name))
                 )
@@ -230,4 +234,4 @@ if __name__ == '__main__':
         f.write('\n')
         
 
-    # save_tensors(dir=f'save_tensors')
+    save_tensors(dir=f'save_tensors/org')

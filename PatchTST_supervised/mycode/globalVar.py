@@ -1,18 +1,12 @@
 from safetensors.torch import save_file
 
-true_counter = 0
-false_counter = 0
-def increas_counter(x: bool):
-    global true_counter
-    global false_counter
-    if x:
-        true_counter += 1
-    else:
-        false_counter += 1
-    # return true_counter, false_counter
+iter = 0
+def increas_counter():
+    global iter
+    iter += 1
 def get_counter():
-    global true_counter, false_counter
-    return true_counter, false_counter
+    global iter
+    return iter
 
 
 smooth_factor = {}
