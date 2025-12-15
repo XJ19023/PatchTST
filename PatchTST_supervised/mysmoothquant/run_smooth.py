@@ -13,6 +13,7 @@ from mx import mxLinear
 from mx.quant_mx_specs import set_mx_specs
 from mycode.globalVar import save_tensors, increas_counter, get_counter, append_activation, save_tensors
 import transformers.models.llama.modeling_llama
+import mycode.quant_utils as quant_utils
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Autoformer & Transformer family for Time Series Forecasting')
 
@@ -157,6 +158,7 @@ if __name__ == '__main__':
 
     Exp = Exp_Main
     exp = Exp(args)
+    model = exp.model
 
     ii = 0
     print('>>>>>>>testing : {}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(args.model_id))
@@ -178,16 +180,19 @@ if __name__ == '__main__':
                                                                                                 args.des, ii)
 
     print('loading model')
-    exp.model.load_state_dict(torch.load(os.path.join('./checkpoints/' + setting, 'checkpoint.pth')))
+    model.load_state_dict(torch.load(os.path.join('./checkpoints/' + setting, 'checkpoint.pth')))
+
+
     smooth_module = []
+    smooth_factor = {}
     if args.smooth:
         smooth_module = args.smooth_module.split()
         loggings = f'smooth_module={smooth_module}, alpha={args.alpha}, '
         from mysmoothquant.smooth import smooth_lm
         act_scales = torch.load('act_scales/patchTST.pt')
-        smooth_lm(exp.model, act_scales, args.alpha, smooth_module)
-
-
+        smooth_lm(model, act_scales, args.alpha, smooth_module, smooth_factor)
+    
+    '''
     if args.mxquant:
         def _set_module(model, submodule_key, module):
             tokens = submodule_key.split('.')
@@ -196,34 +201,53 @@ if __name__ == '__main__':
             for s in sub_tokens:
                 cur_mod = getattr(cur_mod, s)
             setattr(cur_mod, tokens[-1], module)
-            
+
         mx_specs = set_mx_specs(block_size=args.block_size, w_elem_format=args.w_elem_format, a_elem_format=args.a_elem_format, acc_bits=args.acc_bits)
         loggings += f"mx_specs:{mx_specs['block_size']}, {mx_specs['w_elem_format']}, "
-        for name, module in exp.model.named_modules():
+        for name, module in model.named_modules():
             if isinstance(module, torch.nn.Linear):
                 new_layer = mxLinear.set_param(module, mx_specs=mx_specs, name=name, smooth_module=smooth_module)
-                _set_module(exp.model, name, new_layer)
+                _set_module(model, name, new_layer)
                 
     if args.intquant:
         loggings += f'intquant:{args.n_bits}, '
-        exp.model = quantize_model(
-            exp.model,
+        model = quantize_model(
+            model,
             weight_quant="per_channel",
             act_quant="per_token",
             quantize_bmm_input=False,
             n_bits = args.n_bits,
             smooth_module = smooth_module,
         )
-            
+    '''
+
+    quant_utils.add_quant(model)
+    qlayers = quant_utils.find_qlayers(model)
+
+    for name in qlayers:
+        qlayers[name].quant_meth = 'int'
+        qlayers[name].n_bits = 8
+
+        key = None
+        if 'qkv' in smooth_module and name.endswith(('W_Q', 'W_K', 'W_V')):
+            key = name[:41] + '.W_Q'
+        if name.endswith(tuple(smooth_module)): 
+            key = name
+        if key is not None:
+            qlayers[name].smooth_factor = smooth_factor[key]
+
+        qlayers[name].initial_weight = True
+    exp.test(setting, test=1, n_samples=1)
+
     if args.hook:
         hooks = []
-        for name, module in exp.model.named_modules():
+        for name, module in model.named_modules():
             if isinstance(module, torch.nn.Linear) and 'head' not in name and 'W_P' not in name:
                 hooks.append(
                     module.register_forward_hook(functools.partial(stat_input_hook, name=name))
                 )
 
-    # print(exp.model)
+    # print(model)
     print('>>>>>>>testing : {}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(setting))
     mse, mae = exp.test(setting, test=1, n_samples=args.n_samples)
     torch.cuda.empty_cache()
@@ -234,4 +258,4 @@ if __name__ == '__main__':
         f.write('\n')
         
 
-    save_tensors(dir=f'save_tensors/org')
+    # save_tensors(dir=f'save_tensors/org')
