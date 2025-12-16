@@ -1,6 +1,6 @@
 models = TinyLlama-1.1B-Chat-v1.0 llama-2-7b-hf Meta-Llama-3-8B Llama-2-13b-hf opt-125m opt-1.3b opt-2.7b opt-6.7b opt-13b Qwen2.5-0.5B Qwen2.5-1.5B Qwen2.5-7B Qwen2.5-14B llama-7b-hf llama-13b-hf llama-30b-hf
 
-default: org
+default: smooth
 
 # for pred_len in 96 192 336 720; do
 # block_size=0 means no quantization
@@ -8,7 +8,7 @@ SHELL := /bin/bash
 smooth:
 	@start=$$(date +%s); \
 	seq_len=336; \
-	pred_len=192; \
+	pred_len=720; \
 	model_name=PatchTST; \
 	quant_meths=("--mxquant --block_size=16 --w_elem_format=int8 --w_elem_format=int8" \
 	"--mxquant --block_size=16 --w_elem_format=int4 --w_elem_format=int4" \
@@ -16,7 +16,7 @@ smooth:
 	"--intquant --n_bits=4"); \
 	smooth_modules=("qkv" "to_out.0" "ff.0" "ff.3" "qkv to_out.0 ff.0 ff.3"); \
 	alphas="0.9 0.8 0.7 0.6 0.5 0.4 0.3 0.2 0.1"; \
-	alphas="0.9"; \
+	alphas="0.5"; \
 	quant_meths=("--intquant --n_bits=4"); \
 	smooth_modules=("qkv to_out.0 ff.0 ff.3"); \
 	model_id_name=electricity; \

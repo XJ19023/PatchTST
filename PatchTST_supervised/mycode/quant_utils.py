@@ -113,17 +113,74 @@ class QuantWrapper(torch.nn.Module):
         # self.quantizer = ActQuantizer()
         # self.out_quantizer = ActQuantizer()
 
-        self.smooth_factor = None
+        self.name = False
+        self.smooth_en = False
         self.quant_meth = None
         self.n_bits = None
         self.initial_weight = False
+        self.search = False
+
+        self.loss_func = mse
+        self.x_mse_quant_mean = 0
+        self.x_mse_smoothquant_mean = 0
+        self.w_mse_quant_mean = 0
+        self.w_mse_smoothquant_mean = 0
+        self.y_mse_quant_mean = None
+        self.y_mse_smoothquant_mean = None
+
+        self.n_samples = None
+        self.iters = None
 
     def extra_repr(self) -> str:
-        str_ = f'quant_meth: {self.quant_meth}, bits: {self.n_bits}'
+        str_ = f'quant_meth: {self.quant_meth}, bits: {self.n_bits}, smooth: {self.smooth_factor is not None}'
         return str_
 
     def forward(self, x):
+        if self.search:
+            self.iters += 1
+            # if self.name == 'model.backbone.encoder.layers.0.self_attn.W_Q':
+            #     print(self.iters, end=' ')
+            x_smooth = x_quant = x_smoothquant = None
+            w_smooth = w_quant = w_smoothquant = None
+            # smooth
+            self.smooth_factor =  self.smooth_factor.view(1, -1).to(device=x.device)
+            x_smooth = x.div(self.smooth_factor)
+            w_smooth = self.weight.mul(self.smooth_factor)
+            # quant
+            x_quant = per_token_quant(x, self.n_bits, inplace=False)
+            w_quant = per_token_quant(self.weight, self.n_bits, inplace=False)
+            x_smoothquant = per_token_quant(x_smooth, self.n_bits, inplace=False)
+            w_smoothquant = per_token_quant(w_smooth, self.n_bits, inplace=False)
+
+            y_org = torch.functional.F.linear(x, self.weight, self.bias)
+            y_quant = torch.functional.F.linear(x_quant, w_quant, self.bias)
+            y_smoothquant = torch.functional.F.linear(x_smoothquant, w_smoothquant, self.bias)
+
+            x_mse_quant = self.loss_func(x, x_quant)
+            x_mse_smoothquant = self.loss_func(x_smooth, x_smoothquant)
+            w_mse_quant = self.loss_func(self.weight, w_quant)
+            w_mse_smoothquant = self.loss_func(w_smooth, w_smoothquant)
+            y_mse_quant = self.loss_func(y_org, y_quant)
+            y_mse_smoothquant = self.loss_func(y_org, y_smoothquant)
+
+            self.x_mse_quant_mean += x_mse_quant
+            self.x_mse_smoothquant_mean += x_mse_smoothquant
+            self.w_mse_quant_mean += w_mse_quant
+            self.w_mse_smoothquant_mean += w_mse_smoothquant
+            self.y_mse_quant_mean += y_mse_quant
+            self.y_mse_smoothquant_mean += y_mse_smoothquant
+            if self.iters == self.n_samples: 
+                self.x_mse_quant_mean /= self.n_samples
+                self.x_mse_smoothquant_mean /= self.n_samples
+                self.w_mse_quant_mean /= self.n_samples
+                self.w_mse_smoothquant_mean /= self.n_samples
+                self.y_mse_quant_mean /= self.n_samples
+                self.y_mse_smoothquant_mean /= self.n_samples
+                print(f'{self.name[23:]:<28}, ({self.x_mse_quant_mean:.8f}, {self.x_mse_smoothquant_mean:.8f}), ({self.w_mse_quant_mean:.8f}, {self.w_mse_smoothquant_mean:.8f}), ({self.y_mse_quant_mean:.8f}, {self.y_mse_smoothquant_mean:.8f}), {self.y_mse_quant_mean > self.y_mse_smoothquant_mean}')
+            return y_org
+        
         if self.initial_weight:
+            # org_tensor = self.weight.clone()
             if self.smooth_factor is not None:
                 self.smooth_factor =  self.smooth_factor.view(1, -1).to(device=x.device)
                 with torch.no_grad():
@@ -133,6 +190,7 @@ class QuantWrapper(torch.nn.Module):
                 with torch.no_grad():
                     self.weight = per_token_quant(self.weight, self.n_bits)
 
+            # print(f'{self.extra_repr()}, mse: {torch.mean((self.weight - org_tensor) ** 2).item():.18f}')
             self.initial_weight = False
             # return torch.zeros(*x.shape[:-1], self.weight.size(0), device=x.device, dtype=x.dtype)
             return torch.zeros_like(x[..., :self.weight.size(0)])
@@ -144,10 +202,13 @@ class QuantWrapper(torch.nn.Module):
                 x_smooth = x.div(self.smooth_factor)
 
             if self.quant_meth == 'int':
-                x_quant = per_token_quant(x_smooth if x_smooth is not None else x, self.n_bits)
+                x_quant = per_token_quant(x_smooth if x_smooth is not None else x, self.n_bits, inplace=False)
 
             y = torch.functional.F.linear(x_quant if x_quant is not None else x, self.weight, self.bias)
+            # print(f'{self.extra_repr()}, mse: {torch.mean((x - x_quant) ** 2).item():.18f}')
             return y
+        
+
 
 def add_quant(
     module,
@@ -182,10 +243,30 @@ def find_qlayers(module, layers=[QuantWrapper], name=''):
     return res
 
 @torch.no_grad()
-def per_token_quant(t, n_bits=8):
+def per_token_quant(t, n_bits=8, inplace=True):
     scales = t.abs().max(dim=-1, keepdim=True)[0]
     q_max = 2 ** (n_bits - 1) - 1
     scales.clamp_(min=1e-5).div_(q_max)
     # print(t.div(scales).round_())
-    t.div_(scales).round_().mul_(scales)
+    if inplace: # for weight
+        t = t.div_(scales).round_().mul_(scales)
+    else: # for activation
+        t = t.div(scales).round().mul(scales)
     return t
+
+@torch.no_grad()
+def kl_divergence(x, x_q, bins=2048):
+    a = max(x.abs().max(), x_q.abs().max())
+    hist_x  = torch.histc(x, bins=bins, min=-a, max=a)
+    hist_xq = torch.histc(x_q, bins=bins, min=-a, max=a)
+
+    p = hist_x / hist_x.sum()
+    q = hist_xq / hist_xq.sum()
+
+    eps = 1e-8
+    kl = torch.sum(p * torch.log((p + eps) / (q + eps)))
+    return kl
+
+@torch.no_grad()
+def mse(x, x_q):
+    return torch.mean((x - x_q) ** 2).item()

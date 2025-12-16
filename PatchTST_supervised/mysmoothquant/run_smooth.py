@@ -1,3 +1,11 @@
+'''
+搜索内容：
+    1. linear层是否需要smooth, alpha值
+    2. scale粒度：vector size
+    3. INT位宽：4/8 bits
+    4. BFP位宽：4/8 bits，block size：16的倍数
+'''
+
 import argparse
 import functools
 import os
@@ -142,7 +150,7 @@ if __name__ == '__main__':
         args.gpu = args.device_ids[0]
 
     print('Args in experiment:')
-    print(args)
+    # print(args)
     loggings = ''
 
 
@@ -191,6 +199,7 @@ if __name__ == '__main__':
         from mysmoothquant.smooth import smooth_lm
         act_scales = torch.load('act_scales/patchTST.pt')
         smooth_lm(model, act_scales, args.alpha, smooth_module, smooth_factor)
+    # smooth_module = []
     
     '''
     if args.mxquant:
@@ -225,8 +234,14 @@ if __name__ == '__main__':
     qlayers = quant_utils.find_qlayers(model)
 
     for name in qlayers:
+        qlayers[name].name = name
         qlayers[name].quant_meth = 'int'
-        qlayers[name].n_bits = 8
+        qlayers[name].n_bits = 4
+        qlayers[name].search = True
+        qlayers[name].y_mse_quant_mean = 0
+        qlayers[name].y_mse_smoothquant_mean = 0
+        qlayers[name].n_samples = 64
+        qlayers[name].iters = 0
 
         key = None
         if 'qkv' in smooth_module and name.endswith(('W_Q', 'W_K', 'W_V')):
@@ -236,8 +251,9 @@ if __name__ == '__main__':
         if key is not None:
             qlayers[name].smooth_factor = smooth_factor[key]
 
-        qlayers[name].initial_weight = True
-    exp.test(setting, test=1, n_samples=1)
+    mse, _ = exp.test(setting, test=1, n_samples=64)
+    print(mse)
+    exit()
 
     if args.hook:
         hooks = []
