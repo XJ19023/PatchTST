@@ -22,6 +22,7 @@ from mx.quant_mx_specs import set_mx_specs
 from mycode.globalVar import save_tensors, increas_counter, get_counter, append_activation, save_tensors
 import transformers.models.llama.modeling_llama
 import mycode.quant_utils as quant_utils
+from collections import defaultdict
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Autoformer & Transformer family for Time Series Forecasting')
 
@@ -117,9 +118,9 @@ if __name__ == '__main__':
     parser.add_argument('--hook', action='store_true', default=False, help='registe hooks')
     parser.add_argument('--smooth', action='store_true', default=False, help='registe hooks')
     parser.add_argument('--alpha', type=float, default=0.5, help='test samples, 0 means full samples')
-    parser.add_argument('--mxquant', action='store_true', default=False, help='registe hooks')
-    parser.add_argument('--intquant', action='store_true', default=False, help='registe hooks')
+    parser.add_argument('--quant', action='store_true', default=False, help='registe hooks')
     parser.add_argument('--n_bits', type=int, default=8, help='test samples, 0 means full samples')
+    parser.add_argument('--search', action='store_true', default=False, help='registe hooks')
     parser.add_argument(
     '--smooth_module',
     type=str,
@@ -190,70 +191,61 @@ if __name__ == '__main__':
     print('loading model')
     model.load_state_dict(torch.load(os.path.join('./checkpoints/' + setting, 'checkpoint.pth')))
 
+    if args.quant:
+        quant_utils.add_quant(model)
+        qlayers = quant_utils.find_qlayers(model)
 
-    smooth_module = []
-    smooth_factor = {}
-    if args.smooth:
-        smooth_module = args.smooth_module.split()
-        loggings = f'smooth_module={smooth_module}, alpha={args.alpha}, '
-        from mysmoothquant.smooth import smooth_lm
-        act_scales = torch.load('act_scales/patchTST.pt')
-        smooth_lm(model, act_scales, args.alpha, smooth_module, smooth_factor)
-    # smooth_module = []
-    
-    '''
-    if args.mxquant:
-        def _set_module(model, submodule_key, module):
-            tokens = submodule_key.split('.')
-            sub_tokens = tokens[:-1]
-            cur_mod = model
-            for s in sub_tokens:
-                cur_mod = getattr(cur_mod, s)
-            setattr(cur_mod, tokens[-1], module)
+        if args.search:
+            from mysmoothquant.smooth import smooth_lm
+            smooth_factors = defaultdict(list)
+            act_scales = torch.load('act_scales/patchTST.pt')
+            alphas = [i / 10 for i in range(1, 10)]
+            for alpha in alphas:
+                smooth_lm(model, act_scales, alpha, smooth_factors)
+            
+            search_space = []
+            # int quant
+            for n_bits in [8, 4]:
+                int_specs = {'n_bits': n_bits}
+                search_space.append(quant_utils.QuantConfig('int', int_specs, False, 5))
+            # mx quant
+            for elem_format in ['int8', 'int4']:
+                mx_specs = set_mx_specs(block_size=16, w_elem_format=elem_format, a_elem_format=elem_format, acc_bits=None)
+                search_space.append(quant_utils.QuantConfig('mx', mx_specs, False, 5))
 
-        mx_specs = set_mx_specs(block_size=args.block_size, w_elem_format=args.w_elem_format, a_elem_format=args.a_elem_format, acc_bits=args.acc_bits)
-        loggings += f"mx_specs:{mx_specs['block_size']}, {mx_specs['w_elem_format']}, "
-        for name, module in model.named_modules():
-            if isinstance(module, torch.nn.Linear):
-                new_layer = mxLinear.set_param(module, mx_specs=mx_specs, name=name, smooth_module=smooth_module)
-                _set_module(model, name, new_layer)
-                
-    if args.intquant:
-        loggings += f'intquant:{args.n_bits}, '
-        model = quantize_model(
-            model,
-            weight_quant="per_channel",
-            act_quant="per_token",
-            quantize_bmm_input=False,
-            n_bits = args.n_bits,
-            smooth_module = smooth_module,
-        )
-    '''
+            for cfg in search_space:
+                print()
+                print(cfg)
+                for name in qlayers:
+                    qlayers[name].name = name
+                    qlayers[name].search = True
+                    qlayers[name].n_samples = 32
+                    qlayers[name].set_quant_config(cfg)
 
-    quant_utils.add_quant(model)
-    qlayers = quant_utils.find_qlayers(model)
+                    key = None
+                    if name.endswith(('W_Q', 'W_K', 'W_V')):
+                        key = name[:41] + '.W_Q'
+                    else: 
+                        key = name
+                    qlayers[name].smooth_factors = smooth_factors[key]
 
-    for name in qlayers:
-        qlayers[name].name = name
-        qlayers[name].quant_meth = 'int'
-        qlayers[name].n_bits = 4
-        qlayers[name].search = True
-        qlayers[name].y_mse_quant_mean = 0
-        qlayers[name].y_mse_smoothquant_mean = 0
-        qlayers[name].n_samples = 64
-        qlayers[name].iters = 0
+                mse, _ = exp.test(setting, test=1, n_samples=32) # search config
+        else:
+            int_specs = {'n_bits': 8}
+            cfg = quant_utils.QuantConfig('int', int_specs, False, None)
+            print(cfg)
+            for name in qlayers:
+                qlayers[name].name = name
+                qlayers[name].set_quant_config(cfg)
 
-        key = None
-        if 'qkv' in smooth_module and name.endswith(('W_Q', 'W_K', 'W_V')):
-            key = name[:41] + '.W_Q'
-        if name.endswith(tuple(smooth_module)): 
-            key = name
-        if key is not None:
-            qlayers[name].smooth_factor = smooth_factor[key]
+                # key = None
+                # if name.endswith(('W_Q', 'W_K', 'W_V')):
+                #     key = name[:41] + '.W_Q'
+                # else: 
+                #     key = name
+                # qlayers[name].smooth_factors = smooth_factors[key]
 
-    mse, _ = exp.test(setting, test=1, n_samples=64)
-    print(mse)
-    exit()
+        _, _ = exp.test(setting, test=1, n_samples=1) # initial weight
 
     if args.hook:
         hooks = []
@@ -265,7 +257,7 @@ if __name__ == '__main__':
 
     # print(model)
     print('>>>>>>>testing : {}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(setting))
-    mse, mae = exp.test(setting, test=1, n_samples=args.n_samples)
+    mse, mae = exp.test(setting, test=1, n_samples=args.n_samples) # inference
     torch.cuda.empty_cache()
 
     print('MSE: {}, MAE: {}'.format(mse, mae))

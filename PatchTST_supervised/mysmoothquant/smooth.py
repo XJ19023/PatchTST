@@ -77,8 +77,8 @@ def smooth_ln_fcs_patchTST(ln, fcs, act_scales, alpha=0.5, name=None, smooth_fac
     if not isinstance(fcs, list):
         fcs = [fcs]
     # assert isinstance(ln, (LlamaRMSNorm, MistralRMSNorm, MixtralRMSNorm))
-    for fc in fcs:
-        assert isinstance(fc, nn.Linear)
+    # for fc in fcs:
+    #     assert isinstance(fc, nn.Linear)
         # assert ln.weight.numel() == fc.in_features == act_scales.numel()
     device, dtype = fcs[0].weight.device, fcs[0].weight.dtype
     act_scales = act_scales.to(device=device, dtype=dtype)
@@ -92,7 +92,7 @@ def smooth_ln_fcs_patchTST(ln, fcs, act_scales, alpha=0.5, name=None, smooth_fac
         .to(device)
         .to(dtype)
     )
-    smooth_factor[name] = scales.detach().cpu()
+    smooth_factor[name].append(scales.detach().cpu())
 
     # if ln is not None:
     #     ln.weight.div_(scales)
@@ -102,7 +102,7 @@ def smooth_ln_fcs_patchTST(ln, fcs, act_scales, alpha=0.5, name=None, smooth_fac
 
 
 @torch.no_grad()
-def smooth_lm(model, scales, alpha=0.5, smooth_module=None, smooth_factor={}):
+def smooth_lm(model, scales, alpha=0.5, smooth_factor={}):
     for name, module in model.named_modules():
         if isinstance(module, OPTDecoderLayer):
             attn_ln = module.self_attn_layer_norm
@@ -137,28 +137,24 @@ def smooth_lm(model, scales, alpha=0.5, smooth_module=None, smooth_factor={}):
 
         elif isinstance(module, TSTEncoderLayer):
             # attn_ln = module.input_layernorm  # attention forward norm
-            if 'qkv' in smooth_module:
-                qkv = [
-                    module.self_attn.W_Q,
-                    module.self_attn.W_K,
-                    module.self_attn.W_V,
-                ]
+            qkv = [
+                module.self_attn.W_Q,
+                module.self_attn.W_K,
+                module.self_attn.W_V,
+            ]
 
-                qkv_input_scales = scales[name+".self_attn.W_Q"]
-                smooth_ln_fcs_patchTST(None, qkv, qkv_input_scales, alpha, name+".self_attn.W_Q", smooth_factor)
+            qkv_input_scales = scales[name+".self_attn.W_Q"]
+            smooth_ln_fcs_patchTST(None, qkv, qkv_input_scales, alpha, name+".self_attn.W_Q", smooth_factor)
 
-            if 'to_out.0' in smooth_module:
-                fcs = [module.self_attn.to_out[0]]
-                fcs_input_scales = scales[name + ".self_attn.to_out.0"]
-                smooth_ln_fcs_patchTST(None, fcs, fcs_input_scales, alpha, name + ".self_attn.to_out.0", smooth_factor)
+            fcs = [module.self_attn.to_out[0]]
+            fcs_input_scales = scales[name + ".self_attn.to_out.0"]
+            smooth_ln_fcs_patchTST(None, fcs, fcs_input_scales, alpha, name + ".self_attn.to_out.0", smooth_factor)
 
-            if 'ff.0' in smooth_module:
-                fcs = [module.ff[0]]
-                fcs_input_scales = scales[name+".ff.0"]
-                smooth_ln_fcs_patchTST(None, fcs, fcs_input_scales, alpha, name+".ff.0", smooth_factor)
+            fcs = [module.ff[0]]
+            fcs_input_scales = scales[name+".ff.0"]
+            smooth_ln_fcs_patchTST(None, fcs, fcs_input_scales, alpha, name+".ff.0", smooth_factor)
 
-            if 'ff.3' in smooth_module:
-                fcs = [module.ff[3]]
-                fcs_input_scales = scales[name+".ff.3"]
-                smooth_ln_fcs_patchTST(None, fcs, fcs_input_scales, alpha, name+".ff.3", smooth_factor)
+            fcs = [module.ff[3]]
+            fcs_input_scales = scales[name+".ff.3"]
+            smooth_ln_fcs_patchTST(None, fcs, fcs_input_scales, alpha, name+".ff.3", smooth_factor)
             # print('==========', name)
