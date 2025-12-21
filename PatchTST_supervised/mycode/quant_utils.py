@@ -103,27 +103,31 @@ class QuantWrapper(torch.nn.Module):
                     # print(f'{self.cfg.alpha_idx}: {self.name[23:]:<28}, ({self.x_mse_quant_mean:.8f}, {self.x_mse_smoothquant_mean:.8f}), ({self.w_mse_quant_mean:.8f}, {self.w_mse_smoothquant_mean:.8f}), ({self.y_mse_quant_mean:.8f}, {self.y_mse_smoothquant_mean:.8f}), {self.y_mse_quant_mean > self.y_mse_smoothquant_mean}')
             return y_org
         
-        elif self.initial_weight:
-            if self.cfg.smooth_en:
-                smooth_factor =  self.smooth_factors[self.cfg.alpha_idx].view(1, -1).to(device=x.device)
-                with torch.no_grad():
-                    self.weight.mul_(self.smooth_factor)
+        # elif self.initial_weight:
+        #     if self.cfg.smooth_en:
+        #         smooth_factor =  self.smooth_factors[self.cfg.alpha_idx].view(1, -1).to(device=x.device)
+        #         with torch.no_grad():
+        #             self.weight.mul_(self.smooth_factor)
 
-            self.weight = self.quant_func(self.weight, self.cfg.quant_specs, True)
+        #     self.weight = self.quant_func(self.weight, self.cfg.quant_specs, True)
 
-            self.initial_weight = False
-            # return torch.zeros(*x.shape[:-1], self.weight.size(0), device=x.device, dtype=x.dtype)
-            return torch.zeros_like(x[..., :self.weight.size(0)])
+        #     self.initial_weight = False
+        #     # return torch.zeros(*x.shape[:-1], self.weight.size(0), device=x.device, dtype=x.dtype)
+        #     return torch.zeros_like(x[..., :self.weight.size(0)])
 
         else:
             x_smooth = x_quant = None
+            w_smooth = w_quant = None
             if self.cfg.smooth_en:
                 smooth_factor =  self.smooth_factors[self.cfg.alpha_idx].view(1, -1).to(device=x.device)
                 x_smooth = x.div(smooth_factor)
+                w_smooth = self.weight.mul(smooth_factor)
 
             x_quant = self.quant_func(x_smooth if x_smooth is not None else x, self.cfg.quant_specs)
+            w_quant = self.quant_func(w_smooth if w_smooth is not None else self.weight, self.cfg.quant_specs)
 
-            y = torch.functional.F.linear(x_quant if x_quant is not None else x, self.weight, self.bias)
+            y = torch.functional.F.linear(x_quant if x_quant is not None else x, \
+                                          w_quant if w_quant is not None else self.weight, self.bias)
             return y
         
 

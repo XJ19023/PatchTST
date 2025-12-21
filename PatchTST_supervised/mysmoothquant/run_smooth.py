@@ -210,7 +210,7 @@ if __name__ == '__main__':
                 search_space.append(quant_utils.QuantConfig('int', int_specs, False, 5))
             # mx quant
             for elem_format in ['int8', 'int4']:
-                mx_specs = set_mx_specs(block_size=16, w_elem_format=elem_format, a_elem_format=elem_format, acc_bits=None)
+                mx_specs = set_mx_specs(block_size=16, w_elem_format=elem_format, a_elem_format=elem_format)
                 search_space.append(quant_utils.QuantConfig('mx', mx_specs, False, 5))
 
             for cfg in search_space:
@@ -233,19 +233,12 @@ if __name__ == '__main__':
         else:
             int_specs = {'n_bits': 8}
             cfg = quant_utils.QuantConfig('int', int_specs, False, None)
+            mx_specs = set_mx_specs(block_size=16, w_elem_format='int4', a_elem_format='int4')
+            cfg = quant_utils.QuantConfig('mx', mx_specs, False, None)
             print(cfg)
             for name in qlayers:
                 qlayers[name].name = name
                 qlayers[name].set_quant_config(cfg)
-
-                # key = None
-                # if name.endswith(('W_Q', 'W_K', 'W_V')):
-                #     key = name[:41] + '.W_Q'
-                # else: 
-                #     key = name
-                # qlayers[name].smooth_factors = smooth_factors[key]
-
-        _, _ = exp.test(setting, test=1, n_samples=1) # initial weight
 
     if args.hook:
         hooks = []

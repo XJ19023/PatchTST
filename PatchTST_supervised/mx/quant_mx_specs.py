@@ -8,7 +8,7 @@ def set_mx_specs(block_size=16, w_elem_format='int4', a_elem_format='int4', acc_
         'w_elem_format': 'int4',
         'a_elem_format': 'int4',
         'block_size': 16,
-        'acc_bits': 24,
+        'acc_bits': 0,
         'bfloat': 16,
         'scale_bits': 8,
         'custom_cuda': False,
