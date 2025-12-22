@@ -30,9 +30,10 @@ class QuantWrapper(torch.nn.Module):
         self.name = False
         self.smooth_factors = None
         self.initial_weight = True
-        self.search = False
+        self.cal_mse = False
         self.loss_func = mse
         self.n_samples = None
+        self.step_flag = None
 
     def set_quant_config(self, cfg: QuantConfig):
         self.cfg = replace(cfg)
@@ -52,11 +53,17 @@ class QuantWrapper(torch.nn.Module):
         return self.cfg
 
     def extra_repr(self) -> str:
-        str_ = f'quant_meth: {self.cfg.quant_meth}, smooth: {self.cfg.smooth_en}, {self.cfg.alpha_idx}'
+        str_ = 'quant_meth: '
+        if self.cfg.quant_meth == 'int':
+            str_ += f"INT{self.cfg.quant_specs['n_bits']}, "
+        if self.cfg.quant_meth == 'mx':
+            str_ += f"BFP{self.cfg.quant_specs['w_elem_format'][-1]}, "
+        str_ += f"setp: {self.step_flag}, "
+        str_ += f'smooth: {self.cfg.smooth_en}, {self.cfg.alpha_idx}'
         return str_
 
     def forward(self, x):
-        if self.search:
+        if self.cal_mse:
             self.iters += 1
             # if self.name == 'model.backbone.encoder.layers.0.self_attn.W_Q':
             #     print(self.iters, end=' ')
@@ -65,18 +72,19 @@ class QuantWrapper(torch.nn.Module):
             x_quant = self.quant_func(x, self.cfg.quant_specs)
             w_quant = self.quant_func(self.weight, self.cfg.quant_specs)
             y_quant = torch.functional.F.linear(x_quant, w_quant, self.bias)
-            x_mse_quant = self.loss_func(x, x_quant)
-            w_mse_quant = self.loss_func(self.weight, w_quant)
+            # x_mse_quant = self.loss_func(x, x_quant)
+            # w_mse_quant = self.loss_func(self.weight, w_quant)
             y_mse_quant = self.loss_func(y_org, y_quant)
-            self.x_mse_quant_mean += x_mse_quant
-            self.w_mse_quant_mean += w_mse_quant
+            # self.x_mse_quant_mean += x_mse_quant
+            # self.w_mse_quant_mean += w_mse_quant
             self.y_mse_quant_mean += y_mse_quant
             if self.iters == self.n_samples: 
-                self.x_mse_quant_mean /= self.n_samples
-                self.w_mse_quant_mean /= self.n_samples
+                # self.x_mse_quant_mean /= self.n_samples
+                # self.w_mse_quant_mean /= self.n_samples
                 self.y_mse_quant_mean /= self.n_samples
                 # print(f'{self.name[23:]:<28}, {self.x_mse_quant_mean:.8f}, {self.w_mse_quant_mean:.8f}, {self.y_mse_quant_mean:.8f}')
-                # print(f'{self.y_mse_quant_mean:.8f}, ', end='')
+                # print(f'runtime: {self.name:<28}, {self.y_mse_quant_mean:.8f}, ')
+
             if self.cfg.smooth_en:
                 smooth_factor =  self.smooth_factors[self.cfg.alpha_idx].view(1, -1).to(device=x.device)
                 x_smooth = x.div(smooth_factor)
@@ -96,7 +104,7 @@ class QuantWrapper(torch.nn.Module):
                     self.x_mse_smoothquant_mean /= self.n_samples
                     self.w_mse_smoothquant_mean /= self.n_samples
                     self.y_mse_smoothquant_mean /= self.n_samples
-                    self.search = False
+                    self.cal_mse = False
                     if self.y_mse_smoothquant_mean < self.y_mse_quant_mean:
                         self.cfg.smooth_en = True
                     print(f'{self.y_mse_smoothquant_mean:.8f}, ', end='')

@@ -1,6 +1,6 @@
 models = TinyLlama-1.1B-Chat-v1.0 llama-2-7b-hf Meta-Llama-3-8B Llama-2-13b-hf opt-125m opt-1.3b opt-2.7b opt-6.7b opt-13b Qwen2.5-0.5B Qwen2.5-1.5B Qwen2.5-7B Qwen2.5-14B llama-7b-hf llama-13b-hf llama-30b-hf
 
-default: ppl
+default: smooth
 
 # for pred_len in 96 192 336 720; do
 # block_size=0 means no quantization
@@ -27,6 +27,7 @@ smooth:
 		for smooth_module in "$${smooth_modules[@]}"; do \
 			for alpha in $${alphas}; do \
 				python -u mysmoothquant/run_smooth.py $${fixed} \
+				--quant --search \
 				; \
 			done; \
 		done; \

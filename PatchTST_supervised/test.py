@@ -7,10 +7,9 @@ import matplotlib.patches as patches
 from matplotlib.ticker import PercentFormatter
 import torch
 
-tensor = torch.tensor([0.31933215,
-0.31935361,
-0.32020786,
-0.31946877,
-0.3192693, ])
+tensor = torch.tensor([0.1486522 ,
+0.1492039 ,
+0.15035428,
+0.14929476,])
 
-print(tensor[0] * 1.001)
+print(tensor[0] * 1.01)

@@ -8,6 +8,7 @@
 
 import argparse
 import functools
+import math
 import os
 import sys
 sys.path.append('.')
@@ -23,6 +24,17 @@ from mycode.globalVar import save_tensors, increas_counter, get_counter, append_
 import transformers.models.llama.modeling_llama
 import mycode.quant_utils as quant_utils
 from collections import defaultdict
+
+def evaluate(n_samples=None, log_en=False):
+    mse, mae = exp.test(setting, test=1, n_samples=n_samples) # inference
+    torch.cuda.empty_cache()
+    print('MSE: {}, MAE: {}'.format(mse, mae))
+    if log_en:
+        with open(f"logs/{args.model_id}.txt", 'a') as f:
+            f.write(f"mse:{mse:.8f}, {loggings}")
+            f.write('\n')
+    return mse
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Autoformer & Transformer family for Time Series Forecasting')
 
@@ -196,67 +208,140 @@ if __name__ == '__main__':
         qlayers = quant_utils.find_qlayers(model)
 
         if args.search:
-            from mysmoothquant.smooth import smooth_lm
-            smooth_factors = defaultdict(list)
-            act_scales = torch.load('act_scales/patchTST.pt')
-            alphas = [i / 10 for i in range(1, 10)]
-            for alpha in alphas:
-                smooth_lm(model, act_scales, alpha, smooth_factors)
+            # from mysmoothquant.smooth import smooth_lm
+            # smooth_factors = defaultdict(list)
+            # act_scales = torch.load('act_scales/patchTST.pt')
+            # alphas = [i / 10 for i in range(1, 10)]
+            # for alpha in alphas:
+            #     smooth_lm(model, act_scales, alpha, smooth_factors)
             
-            search_space = []
+            print('----------calculate baseline---------------')
             # int quant
-            for n_bits in [8, 4]:
-                int_specs = {'n_bits': n_bits}
-                search_space.append(quant_utils.QuantConfig('int', int_specs, False, 5))
+            cal_mse_samples = 32
+            int_specs = {'n_bits': 8}
+            cfg = quant_utils.QuantConfig('int', int_specs, False, None)
             # mx quant
-            for elem_format in ['int8', 'int4']:
-                mx_specs = set_mx_specs(block_size=16, w_elem_format=elem_format, a_elem_format=elem_format)
-                search_space.append(quant_utils.QuantConfig('mx', mx_specs, False, 5))
+            # for elem_format in ['int8', 'int4']:
+            #     mx_specs = set_mx_specs(block_size=16, w_elem_format=elem_format, a_elem_format=elem_format)
+                # cal_mse_space.append(quant_utils.QuantConfig('mx', mx_specs, False, 5))
 
-            for cfg in search_space:
-                print()
+            for name in qlayers:
+                qlayers[name].name = name
+                qlayers[name].cal_mse = True
+                qlayers[name].n_samples = cal_mse_samples
+                qlayers[name].set_quant_config(cfg)
+
+                # key = None
+                # if name.endswith(('W_Q', 'W_K', 'W_V')):
+                #     key = name[:41] + '.W_Q'
+                # else: 
+                #     key = name
+                # qlayers[name].smooth_factors = smooth_factors[key]
+
+            mse_int8 = evaluate(n_samples=cal_mse_samples) # use int8 as baseline
+            mse_th = mse_int8 * 1.001
+            print(f'mse_int8: {mse_int8:.8f}')
+            print(f'mse_th: {mse_th:.8f}')
+
+            print('----------int8 layers to BFP4---------------')
+            layer_mse = {}
+            for name in qlayers:
+                layer_mse[name] = qlayers[name].y_mse_quant_mean
+            layer_mse_sorted = dict(sorted(layer_mse.items(), key=lambda item: item[1]))
+
+            left, right = 0, len(layer_mse_sorted) + 1 # [left, right)
+            while (right > left):
+                mid = (right + left) // 2
+                print(left, right, mid, len(layer_mse_sorted))
+                to_BFP4 = dict(list(layer_mse_sorted.items())[:mid])
+                mx_specs = set_mx_specs(block_size=16, w_elem_format='int4', a_elem_format='int4')
+                cfg = quant_utils.QuantConfig('mx', mx_specs, False, None)
+
+                for name in to_BFP4.keys():
+                    qlayers[name].name = name
+                    qlayers[name].cal_mse = False
+                    qlayers[name].step_flag = 1 # 1 for replaced BFP4
+                    # qlayers[name].n_samples = cal_mse_samples
+                    qlayers[name].set_quant_config(cfg)
+                
+                mse_tmp = evaluate(n_samples=cal_mse_samples)
+                if mse_tmp < mse_th:
+                    left = mid + 1
+                else:
+                    right = mid
+
+            loggings = 'step1: INT8 to BFP4'
+            mse_BFP4 = evaluate(log_en=True)
+            print(f'mse_BFP4: {mse_BFP4:.8f}')
+
+            print('----------int8 layers to BFP8---------------')
+            layer_mse = {}
+            for name in qlayers:
+                if qlayers[name].step_flag == 1: # frize BFP4
+                    continue
+                layer_mse[name] = qlayers[name].y_mse_quant_mean
+            layer_mse_sorted = dict(sorted(layer_mse.items(), key=lambda item: item[1]))
+            # print(layer_mse_sorted)
+            # print(exp.model)
+            # exit()
+
+            left, right = 0, len(layer_mse_sorted) + 1
+            while (right > left):
+                mid = (right + left) // 2
+                print(left, right, mid, len(layer_mse_sorted))
+                to_BFP8 = dict(list(layer_mse_sorted.items())[:mid])
+                mx_specs = set_mx_specs(block_size=16, w_elem_format='int8', a_elem_format='int8')
+                cfg = quant_utils.QuantConfig('mx', mx_specs, False, None)
+
+                for name in to_BFP8.keys():
+                    qlayers[name].name = name
+                    qlayers[name].cal_mse = False
+                    qlayers[name].step_flag = 2 # 1 for BFP4 replace
+                    # qlayers[name].n_samples = cal_mse_samples
+                    qlayers[name].set_quant_config(cfg)
+                
+                # print('----------cal_mseing---------------')
+                mse_tmp = evaluate(n_samples=cal_mse_samples)
+                if mse_tmp < mse_th:
+                    left = mid + 1
+                else:
+                    right = mid
+            
+            # print(exp.model)
+            loggings = 'step2: INT8 to BFP8'
+            mse_BFP8 = evaluate(log_en=True)
+            print(f'mse_BFP8: {mse_BFP8:.8f}')
+
+
+
+        else: 
+            cal_mse_space = []
+            # int quant
+            # for n_bits in [8, 4]:
+            #     int_specs = {'n_bits': n_bits}
+            #     cal_mse_space.append(quant_utils.QuantConfig('int', int_specs, False, None))
+            # mx quant
+            for elem_format in ['int4']:
+                mx_specs = set_mx_specs(block_size=16, w_elem_format=elem_format, a_elem_format=elem_format)
+                cal_mse_space.append(quant_utils.QuantConfig('mx', mx_specs, False, None))
+
+            for cfg in cal_mse_space:
                 print(cfg)
                 for name in qlayers:
                     qlayers[name].name = name
-                    qlayers[name].search = True
-                    qlayers[name].n_samples = 32
                     qlayers[name].set_quant_config(cfg)
 
-                    key = None
-                    if name.endswith(('W_Q', 'W_K', 'W_V')):
-                        key = name[:41] + '.W_Q'
-                    else: 
-                        key = name
-                    qlayers[name].smooth_factors = smooth_factors[key]
+                if args.hook:
+                    hooks = []
+                    for name, module in model.named_modules():
+                        if isinstance(module, torch.nn.Linear) and 'head' not in name and 'W_P' not in name:
+                            hooks.append(
+                                module.register_forward_hook(functools.partial(stat_input_hook, name=name))
+                            )
 
-                mse, _ = exp.test(setting, test=1, n_samples=32) # search config
-        else:
-            int_specs = {'n_bits': 8}
-            cfg = quant_utils.QuantConfig('int', int_specs, False, None)
-            mx_specs = set_mx_specs(block_size=16, w_elem_format='int4', a_elem_format='int4')
-            cfg = quant_utils.QuantConfig('mx', mx_specs, False, None)
-            print(cfg)
-            for name in qlayers:
-                qlayers[name].name = name
-                qlayers[name].set_quant_config(cfg)
-
-    if args.hook:
-        hooks = []
-        for name, module in model.named_modules():
-            if isinstance(module, torch.nn.Linear) and 'head' not in name and 'W_P' not in name:
-                hooks.append(
-                    module.register_forward_hook(functools.partial(stat_input_hook, name=name))
-                )
-
-    # print(model)
-    print('>>>>>>>testing : {}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(setting))
-    mse, mae = exp.test(setting, test=1, n_samples=args.n_samples) # inference
-    torch.cuda.empty_cache()
-
-    print('MSE: {}, MAE: {}'.format(mse, mae))
-    with open(f"logs/{args.model_id}.txt", 'a') as f:
-        f.write(f"mse:{mse:.8}, {loggings}")
-        f.write('\n')
+                evaluate()
+    else:
+        evaluate()
         
 
     # save_tensors(dir=f'save_tensors/org')
