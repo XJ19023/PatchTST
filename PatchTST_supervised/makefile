@@ -8,7 +8,7 @@ SHELL := /bin/bash
 smooth:
 	@start=$$(date +%s); \
 	seq_len=336; \
-	pred_len=720; \
+	pred_len=96; \
 	model_name=PatchTST; \
 	quant_meths=("--mxquant --block_size=16 --w_elem_format=int8 --w_elem_format=int8" \
 	"--mxquant --block_size=16 --w_elem_format=int4 --w_elem_format=int4" \

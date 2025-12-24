@@ -10,12 +10,12 @@ model_name=PatchTST
 
 root_path_name=./dataset/
 data_path_name=electricity.csv
-model_id_name=electricity
+model_id_name=Electricity
 data_name=custom
 
 random_seed=2021
 # for pred_len in 96 192 336 720
-for pred_len in 192
+for pred_len in 96 720
 do
     python -u run_longExp.py \
       --random_seed $random_seed \

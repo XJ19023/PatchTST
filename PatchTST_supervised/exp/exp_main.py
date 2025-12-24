@@ -216,8 +216,10 @@ class Exp_Main(Exp_Basic):
 
         return self.model
 
-    def test(self, setting, test=0, n_samples=None):
+    def test(self, setting=None, test=0, n_samples=None, get_max_samples=False):
         test_data, test_loader = self._get_data(flag='test')
+        if get_max_samples:
+            return len(test_loader)
         
         preds = []
         trues = []

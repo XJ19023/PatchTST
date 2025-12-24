@@ -26,14 +26,14 @@ class QuantWrapper(torch.nn.Module):
         self.weight = module.weight
         self.bias = module.bias
 
-        self.cfg = None
         self.name = False
         self.smooth_factors = None
-        self.initial_weight = True
-        self.cal_mse = False
         self.loss_func = mse
         self.n_samples = None
         self.step_flag = None
+        self.y_mse_quant_mean = 0 # calculate once, then stored as baseline
+        self.iters = 0
+        self.using_BFP4 = False
 
     def set_quant_config(self, cfg: QuantConfig):
         self.cfg = replace(cfg)
@@ -41,9 +41,11 @@ class QuantWrapper(torch.nn.Module):
         self.x_mse_smoothquant_mean = 0
         self.w_mse_quant_mean = 0
         self.w_mse_smoothquant_mean = 0
-        self.y_mse_quant_mean = 0
+        self.y_mse_intquant_mean = 0
+        self.y_mse_mxquant_mean = 0
         self.y_mse_smoothquant_mean = 0
         self.iters = 0
+        self.using_BFP4 = False
         if self.cfg.quant_meth == 'int':
             self.quant_func = per_token_quant
         if self.cfg.quant_meth == 'mx':
@@ -63,7 +65,54 @@ class QuantWrapper(torch.nn.Module):
         return str_
 
     def forward(self, x):
-        if self.cal_mse:
+        if self.step_flag == 1: # calculate int8 mse as baseline
+            self.iters += 1
+            y_org = torch.functional.F.linear(x, self.weight, self.bias)
+            x_quant = per_token_quant(x, {'n_bits': 8})
+            w_quant = per_token_quant(self.weight, {'n_bits': 8})
+            y_quant = torch.functional.F.linear(x_quant, w_quant, self.bias)
+            y_mse_quant = self.loss_func(y_org, y_quant)
+            self.y_mse_quant_mean += y_mse_quant
+            if self.iters == self.n_samples: 
+                self.y_mse_quant_mean /= self.n_samples
+                self.step_flag = -1
+            return y_org
+        
+        elif self.step_flag == 2: # replace int8 to 4 bits
+            self.iters += 1
+            y_org = torch.functional.F.linear(x, self.weight, self.bias)
+            x_intquant = per_token_quant(x, {'n_bits': 4})
+            w_intquant = per_token_quant(self.weight, {'n_bits': 4})
+            y_intquant = torch.functional.F.linear(x_intquant, w_intquant, self.bias)
+            y_mse_intquant = self.loss_func(y_org, y_intquant)
+
+            x_mxquant = mx_quant(x, self.cfg.quant_specs)
+            w_mxquant = mx_quant(self.weight, self.cfg.quant_specs)
+            y_mxquant = torch.functional.F.linear(x_mxquant, w_mxquant, self.bias)
+            y_mse_mxquant = self.loss_func(y_org, y_mxquant)
+            self.y_mse_intquant_mean += y_mse_intquant
+            self.y_mse_mxquant_mean += y_mse_mxquant
+            if self.iters == self.n_samples: 
+                self.y_mse_intquant_mean /= self.n_samples
+                self.y_mse_mxquant_mean /= self.n_samples
+
+                # print(f'{self.y_mse_intquant_mean:.8f}, {self.y_mse_mxquant_mean:.8f}, {self.y_mse_intquant_mean >= self.y_mse_mxquant_mean}')
+
+                if self.y_mse_intquant_mean * 2 >= self.y_mse_mxquant_mean:
+                # if True:
+                    self.using_BFP4 = True
+                    self.cfg.quant_meth = 'mx'
+                    self.cfg.quant_specs = self.cfg.quant_specs
+                    self.quant_func = mx_quant
+                else:
+                    self.cfg.quant_meth = 'int'
+                    self.cfg.quant_specs = {'n_bits': 4}
+                    self.quant_func = per_token_quant
+                self.step_flag = -2
+                
+            return y_org
+            
+        elif False:
             self.iters += 1
             # if self.name == 'model.backbone.encoder.layers.0.self_attn.W_Q':
             #     print(self.iters, end=' ')
