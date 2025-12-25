@@ -1,6 +1,5 @@
+lst = [5, 3, 8, 2, 4]
 
+min_idx, min_val = min(enumerate(lst), key=lambda x: x[1])
 
-test = {'a': 1, 'b':2, 'c':3, 'd':4}
-
-print(dict(list(test.items())[:2]))
-print(dict(list(test.items())[2:]))
+print(min_val, min_idx)   # 2 3

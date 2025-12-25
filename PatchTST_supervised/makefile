@@ -27,7 +27,7 @@ smooth:
 		for smooth_module in "$${smooth_modules[@]}"; do \
 			for alpha in $${alphas}; do \
 				python -u mysmoothquant/run_smooth.py $${fixed} \
-				--quant --search \
+				--quant --search --smooth \
 				; \
 			done; \
 		done; \
