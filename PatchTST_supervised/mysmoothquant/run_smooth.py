@@ -133,6 +133,8 @@ if __name__ == '__main__':
     parser.add_argument('--alpha', type=float, default=0.5, help='test samples, 0 means full samples')
     parser.add_argument('--quant', action='store_true', default=False, help='registe hooks')
     parser.add_argument('--n_bits', type=int, default=8, help='test samples, 0 means full samples')
+    parser.add_argument('--org', action='store_true', default=False, help='registe hooks')
+    parser.add_argument('--separate', action='store_true', default=False, help='registe hooks')
     parser.add_argument('--search', action='store_true', default=False, help='registe hooks')
     parser.add_argument(
     '--smooth_module',
@@ -208,9 +210,47 @@ if __name__ == '__main__':
     print('loading model')
     model.load_state_dict(torch.load(os.path.join('./checkpoints/' + setting, 'checkpoint.pth')))
 
+    if args.org:
+        loggings = f'org'
+        evaluate(log_en=True)
+        
+
     if args.quant:
         quant_utils.add_quant(model)
         qlayers = quant_utils.find_qlayers(model)
+
+        if args.separate: 
+            cal_mse_space = []
+            # int quant
+            for n_bits in [8, 4]:
+                int_specs = {'n_bits': n_bits}
+                cal_mse_space.append(quant_utils.QuantConfig('int', int_specs, None))
+            # mx quant
+            for elem_format in ['int8', 'int4']:
+                mx_specs = set_mx_specs(block_size=16, w_elem_format=elem_format, a_elem_format=elem_format)
+                cal_mse_space.append(quant_utils.QuantConfig('mx', mx_specs, None))
+
+            for idx, cfg in enumerate(cal_mse_space):
+                for name in qlayers:
+                    qlayers[name].name = name
+                    qlayers[name].set_quant_config(cfg)
+
+                if args.hook:
+                    hooks = []
+                    for name, module in model.named_modules():
+                        if isinstance(module, torch.nn.Linear) and 'head' not in name and 'W_P' not in name:
+                            hooks.append(
+                                module.register_forward_hook(functools.partial(stat_input_hook, name=name))
+                            )
+                if idx == 0:
+                    loggings = f'int8'
+                if idx == 1:
+                    loggings = f'int4'
+                if idx == 2:
+                    loggings = f'BFP8'
+                if idx == 3:
+                    loggings = f'BFP4'
+                evaluate(log_en=True)
 
         if args.search:
             print('----------Step1: calculate baseline---------------')
@@ -225,7 +265,7 @@ if __name__ == '__main__':
 
             mse_int8 = evaluate(n_samples=cal_mse_samples) # use int8 as baseline
             mse_th = mse_int8 * 1.0001
-            mse_th = 0.1515
+            mse_th = 0.2303
             print(f'mse_int8: {mse_int8:.8f}')
             print(f'mse_th: {mse_th:.8f}')
             with open('logs/model_structure/step1.txt', 'w') as f:
@@ -238,7 +278,7 @@ if __name__ == '__main__':
                 layer_mse[name] = qlayers[name].y_mse_quant_mean
             layer_mse_sorted = dict(sorted(layer_mse.items(), key=lambda item: item[1]))
 
-            left, right = 0, len(layer_mse_sorted) + 1 # [left, right)
+            left, right = 1, len(layer_mse_sorted) + 1 # [left, right)
             while (right > left):
                 mid = (right + left) // 2
                 print(left, right, mid, len(layer_mse_sorted), end=' ')
@@ -257,11 +297,15 @@ if __name__ == '__main__':
                 
                 _ = evaluate(n_samples=cal_mse_samples, print_en=False) # search for int4 or BFP4
                 mse_tmp = evaluate(n_samples=cal_mse_samples)
+
                 if mse_tmp < mse_th:
                     left = mid + 1
+                    if mse_th == 1000:
+                        mse_th = mse_tmp
                 else:
                     right = mid
 
+            left -= 1
             keep_int8 = dict(list(layer_mse_sorted.items())[left:])
             cfg = quant_utils.QuantConfig('int', {'n_bits': 8}, None)
             for name in keep_int8.keys():
@@ -278,7 +322,7 @@ if __name__ == '__main__':
                 else:
                     qlayers[name].set_quant_config(cfg_int) # deliver mx_specs
             
-            loggings = 'step2: INT8 to 4 bits'
+            loggings = f'step2: INT8 to 4 bits, mse_th = {mse_th}'
             mse_4bits = evaluate(log_en=True, print_en=False)
             print(f'mse_4bits: {mse_4bits:.8f}')
 
@@ -287,14 +331,14 @@ if __name__ == '__main__':
                 f.write(str(model) + '\n\n')
 
             print('----------Step3: left int8 layers to BFP8---------------')
-            mse_th = 0.1512
+            mse_th = 0.3266
             layer_mse = {}
             for name in qlayers:
                 if qlayers[name].step_flag == -1: # frize 4 btis
                     layer_mse[name] = qlayers[name].y_mse_quant_mean
             layer_mse_sorted = dict(sorted(layer_mse.items(), key=lambda item: item[1]))
 
-            left, right = 0, len(layer_mse_sorted) + 1
+            left, right = 1, len(layer_mse_sorted) + 1
             while (right > left):
                 if len(layer_mse_sorted) == 0:
                     break
@@ -316,8 +360,12 @@ if __name__ == '__main__':
                 mse_tmp = evaluate(n_samples=cal_mse_samples)
                 if mse_tmp < mse_th:
                     left = mid + 1
+                    if mse_th == 1000:
+                        mse_th = mse_tmp
                 else:
                     right = mid
+
+            left -= 1
             keep_int8 = dict(list(layer_mse_sorted.items())[left:])
             cfg = quant_utils.QuantConfig('int', {'n_bits': 8}, None)
             for name in keep_int8.keys():
@@ -330,84 +378,53 @@ if __name__ == '__main__':
                 qlayers[name].step_flag = -3 # 3 for replaced BFP8 
                 qlayers[name].set_quant_config(cfg)
             
-            loggings = 'step3: left INT8 to BFP8'
+            loggings = f'step3: left INT8 to BFP8, mse_th = {mse_th}'
             mse_BFP8 = evaluate(log_en=True, print_en=False)
             print(f'mse_BFP8: {mse_BFP8:.8f}')
             with open('logs/model_structure/step3.txt', 'w') as f:
                 f.write(f'>>> Step3 Model <<< left INT8 to BFP8\n')
                 f.write(str(model) + '\n\n')
 
-            if args.smooth:
-                print('----------Step4: enable smooth---------------')
-                from mysmoothquant.smooth import smooth_lm
-                smooth_factors = defaultdict(list)
-                act_scales = torch.load('act_scales/patchTST.pt')
-                alphas = [i / 10 for i in range(1, 10)]
-                for alpha in alphas:
-                    smooth_lm(model, act_scales, alpha, smooth_factors)
+            print('----------Step4: enable smooth---------------')
+            from mysmoothquant.smooth import smooth_lm
+            smooth_factors = defaultdict(list)
+            act_scales = torch.load(f'act_scales/{args.model_id}.pt')
+            alphas = [i / 10 for i in range(1, 10)]
+            for alpha in alphas:
+                smooth_lm(model, act_scales, alpha, smooth_factors)
 
-                for name in qlayers:
-                    qlayers[name].y_mse_smoothquant_mean = [0 for _ in alphas]
-                    qlayers[name].step_flag = 4  # search smooth
+            for name in qlayers:
+                qlayers[name].y_mse_smoothquant_mean = [0 for _ in alphas]
+                qlayers[name].step_flag = 4  # search smooth
 
-                    key = None
-                    if name.endswith(('W_Q', 'W_K', 'W_V')):
-                        key = name[:41] + '.W_Q'
-                    else: 
-                        key = name
-                    qlayers[name].smooth_factors = smooth_factors[key]
-                evaluate(n_samples=cal_mse_samples)
-                
-                for name in qlayers:
-                    quant_mse = qlayers[name].y_mse_quant_mean
-                    smoothquant_mse = qlayers[name].y_mse_smoothquant_mean
-                    min_idx, min_val = min(enumerate(smoothquant_mse), key=lambda x: x[1])
-                    if min_val < quant_mse:
-                        qlayers[name].smooth_factor = qlayers[name].smooth_factors[min_idx]
-                        qlayers[name].cfg.alpha = (min_idx + 1) / 10
-                        qlayers[name].smooth_factors = None
+                key = None
+                if name.endswith(('W_Q', 'W_K', 'W_V')):
+                    key = name[:41] + '.W_Q'
+                else: 
+                    key = name
+                qlayers[name].smooth_factors = smooth_factors[key]
+            evaluate(n_samples=cal_mse_samples)
+            
+            for name in qlayers:
+                quant_mse = qlayers[name].y_mse_quant_mean
+                smoothquant_mse = qlayers[name].y_mse_smoothquant_mean
+                min_idx, min_val = min(enumerate(smoothquant_mse), key=lambda x: x[1])
+                # print(f'{quant_mse:.8f}, {min_val:.8f}, {min_val < quant_mse}')
+                if min_val < quant_mse:
+                    qlayers[name].smooth_factor = qlayers[name].smooth_factors[min_idx]
+                    qlayers[name].cfg.alpha = (min_idx + 1) / 10
 
-                loggings = 'step4: enable smooth'
-                mse_smooth = evaluate(log_en=True, print_en=False)
-                print(f'mse_smooth: {mse_smooth:.8f}')
-                with open('logs/model_structure/step4.txt', 'w') as f:
-                    f.write(f'>>> Step4 Model <<< enable smooth\n')
-                    f.write(str(model) + '\n\n')
-
-
-
+            loggings = 'step4: enable smooth \n'
+            mse_smooth = evaluate(log_en=True, print_en=False)
+            print(f'mse_smooth: {mse_smooth:.8f}')
+            with open('logs/model_structure/step4.txt', 'w') as f:
+                f.write(f'>>> Step4 Model <<< enable smooth\n')
+                f.write(str(model) + '\n\n')
 
             print('----------final quantized model---------------')
 
 
-        else: 
-            cal_mse_space = []
-            # int quant
-            for n_bits in [8, 4]:
-                int_specs = {'n_bits': n_bits}
-                cal_mse_space.append(quant_utils.QuantConfig('int', int_specs, None))
-            # mx quant
-            for elem_format in ['int8', 'int4']:
-                mx_specs = set_mx_specs(block_size=16, w_elem_format=elem_format, a_elem_format=elem_format)
-                cal_mse_space.append(quant_utils.QuantConfig('mx', mx_specs, None))
-
-            for cfg in cal_mse_space:
-                print(cfg)
-                for name in qlayers:
-                    qlayers[name].name = name
-                    qlayers[name].set_quant_config(cfg)
-
-                if args.hook:
-                    hooks = []
-                    for name, module in model.named_modules():
-                        if isinstance(module, torch.nn.Linear) and 'head' not in name and 'W_P' not in name:
-                            hooks.append(
-                                module.register_forward_hook(functools.partial(stat_input_hook, name=name))
-                            )
-
-                evaluate(log_en=True)
-    else:
-        evaluate(log_en=True)
+        
         
 
     # save_tensors(dir=f'save_tensors/org')

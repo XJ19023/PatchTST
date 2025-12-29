@@ -172,7 +172,7 @@ if __name__ == '__main__':
     mse, mae = exp.test(setting, test=1, n_samples=args.n_samples)
     torch.cuda.empty_cache()
 
-    output_path = f'act_scales/patchTST.pt'
+    output_path = f'act_scales/{args.model_id}.pt'
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     torch.save(act_scales, output_path)
         
