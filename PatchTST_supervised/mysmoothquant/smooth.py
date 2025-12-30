@@ -112,12 +112,12 @@ def smooth_lm(model, scales, alpha=0.5, smooth_factor={}):
                 module.self_attn.v_proj,
             ]
             qkv_input_scales = scales[name + ".self_attn.q_proj"]
-            # smooth_ln_fcs(attn_ln, qkv, qkv_input_scales, alpha)
+            smooth_ln_fcs_patchTST(None, qkv, qkv_input_scales, alpha, name+".self_attn.q_proj", smooth_factor)
 
             ffn_ln = module.final_layer_norm
             fc1 = module.fc1
             fc1_input_scales = scales[name + ".fc1"]
-            smooth_ln_fcs(ffn_ln, fc1, fc1_input_scales, alpha)
+            smooth_ln_fcs_patchTST(None, fc1, fc1_input_scales, alpha, name+".fc1", smooth_factor)
         elif isinstance(module, (LlamaDecoderLayer, MistralDecoderLayer)):
             attn_ln = module.input_layernorm  # attention forward norm
             qkv = [

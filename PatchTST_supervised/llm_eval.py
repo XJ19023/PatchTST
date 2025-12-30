@@ -5,7 +5,7 @@ import torch.nn as nn
 from transformers import AutoTokenizer, AutoModelForCausalLM
 # from smoothquant.smooth import smooth_lm
 # from smoothquant.fake_quant import quantize_model
-import tqdm
+from tqdm import tqdm
 
 from datasets import load_dataset
 import argparse
@@ -23,6 +23,7 @@ parser.add_argument(
     default="act_scales/llama-2-7b.pt",
 )
 parser.add_argument("--n_samples", type=int, default=None)
+parser.add_argument("--block_size", type=int, default=16)
 parser.add_argument("--smooth", action="store_true")
 parser.add_argument("--quant", action="store_true")
 parser.add_argument("--hook", action="store_true")
@@ -54,11 +55,15 @@ class Evaluator:
 
 
     @torch.no_grad()
-    def evaluate(self, model, print_en=True, log_en=False, n_samples=None, info=''):
+    def evaluate(self, model, print_en=True, log_en=False, n_samples=None, info='', search_en=False):
         model.eval()
         nlls = []
         n_samples = n_samples if n_samples else self.dataset.size(1) // 2048
-        for i in tqdm.tqdm(range(n_samples), desc=f"Evaluating {info}..."):
+        if search_en:
+            iterator = range(n_samples)
+        else:
+            iterator = tqdm(range(n_samples), desc=f"Evaluating {info}...")
+        for i in iterator:
             batch = self.dataset[:, (i * 2048) : ((i + 1) * 2048)].to(model.device)
             with torch.no_grad():
                 lm_logits = model(batch).logits
@@ -91,9 +96,9 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 
 os.makedirs(f'logs/{args.model_name}/model_structure', exist_ok=True)
-# with open(f'logs/{args.model_name}/model_structure/orginal_model.txt', 'w') as f:
-#     f.write(f'>>> Original Model <<<\n')
-#     f.write(str(model) + '\n\n')
+with open(f'logs/{args.model_name}/model_structure/orginal_model.txt', 'w') as f:
+    f.write(f'>>> Original Model <<<\n')
+    f.write(str(model) + '\n\n')
 
 '''
 if args.hook:
@@ -121,7 +126,7 @@ if args.quant:
             cal_mse_space.append(quant_utils.QuantConfig('int', int_specs, None))
         # mx quant
         for elem_format in ['int8', 'int4']:
-            mx_specs = set_mx_specs(block_size=16, w_elem_format=elem_format, a_elem_format=elem_format)
+            mx_specs = set_mx_specs(block_size=args.block_size, w_elem_format=elem_format, a_elem_format=elem_format)
             cal_mse_space.append(quant_utils.QuantConfig('mx', mx_specs, None))
 
         for idx, cfg in enumerate(cal_mse_space):
@@ -138,10 +143,6 @@ if args.quant:
             if idx == 3:
                 loggings = f'BFP4'
             evaluator.evaluate(model, log_en=True, info=loggings)
-    with open(f'logs/{args.model_name}/model_structure/quant_model.txt', 'w') as f:
-        f.write(f'>>> Original Model <<<\n')
-        f.write(str(model) + '\n\n')
-    exit()
 
     if args.search:
         print('----------Step1: calculate baseline---------------')
@@ -154,11 +155,12 @@ if args.quant:
             qlayers[name].set_quant_config(cfg)
 
         ppl_int8 = evaluator.evaluate(model, n_samples=search_samples) # use int8 as baseline
-        ppl_th = ppl_int8 * 1.0001
-        ppl_th = 0.2303
+        ppl_th = ppl_int8 * 1.05
+        # ppl_th = 0.2303
         print(f'ppl_int8: {ppl_int8:.8f}')
+        '''
         print(f'ppl_th: {ppl_th:.8f}')
-        with open('logs/model_structure/step1.txt', 'w') as f:
+        with open(f'logs/{args.model_name}/model_structure/step1.txt', 'w') as f:
             f.write(f'>>> Step1 Model <<< calculate INT8 as baseline\n')
             f.write(str(model) + '\n\n')
         
@@ -179,14 +181,14 @@ if args.quant:
             for name in keep_int8.keys():
                 qlayers[name].step_flag = -1 # keep as int8
                 qlayers[name].set_quant_config(cfg)
-            mx_specs = set_mx_specs(block_size=16, w_elem_format='int4', a_elem_format='int4')
+            mx_specs = set_mx_specs(block_size=args.block_size, w_elem_format='int4', a_elem_format='int4')
             cfg = quant_utils.QuantConfig(None, mx_specs, None) # deliver mx_specs
             for name in to_4bits.keys():
                 qlayers[name].step_flag = 2 # search for int4 or BFP4
                 qlayers[name].set_quant_config(cfg) # deliver mx_specs
             
-            _ = evaluator.evaluate(model, n_samples=search_samples, print_en=False) # search for int4 or BFP4
-            ppl_tmp = evaluator.evaluate(model, n_samples=search_samples)
+            _ = evaluator.evaluate(model, n_samples=search_samples, print_en=False, search_en=True) # search for int4 or BFP4
+            ppl_tmp = evaluator.evaluate(model, n_samples=search_samples, search_en=True)
 
             if ppl_tmp < ppl_th:
                 left = mid + 1
@@ -202,7 +204,7 @@ if args.quant:
             qlayers[name].step_flag = -1 # keep as int8
             qlayers[name].set_quant_config(cfg)
         to_4bits = dict(list(layer_mse_sorted.items())[:left])
-        mx_specs = set_mx_specs(block_size=16, w_elem_format='int4', a_elem_format='int4')
+        mx_specs = set_mx_specs(block_size=args.block_size, w_elem_format='int4', a_elem_format='int4')
         cfg_mx = quant_utils.QuantConfig('mx', mx_specs, None)
         cfg_int = quant_utils.QuantConfig('int', {'n_bits': 4}, None)
         for name in to_4bits.keys():
@@ -216,12 +218,13 @@ if args.quant:
         ppl_4bits = evaluator.evaluate(model, log_en=True, print_en=False)
         print(f'ppl_4bits: {ppl_4bits:.8f}')
 
-        with open('logs/model_structure/step2.txt', 'w') as f:
+        with open(f'logs/{args.model_name}/model_structure/step2.txt', 'w') as f:
             f.write(f'>>> Step2 Model <<< INT8 to 4 bits\n')
             f.write(str(model) + '\n\n')
 
         print('----------Step3: left int8 layers to BFP8---------------')
         mse_th = 0.3266
+        mse_th = ppl_4bits * 1.01
         layer_mse = {}
         for name in qlayers:
             if qlayers[name].step_flag == -1: # frize 4 btis
@@ -241,13 +244,13 @@ if args.quant:
                 qlayers[name].step_flag = -1 # keep as int8
                 qlayers[name].set_quant_config(cfg)
             to_BFP8 = dict(list(layer_mse_sorted.items())[:mid])
-            mx_specs = set_mx_specs(block_size=16, w_elem_format='int8', a_elem_format='int8')
+            mx_specs = set_mx_specs(block_size=args.block_size, w_elem_format='int8', a_elem_format='int8')
             cfg = quant_utils.QuantConfig('mx', mx_specs, None)
             for name in to_BFP8.keys():
                 qlayers[name].step_flag = 3 # 3 for replaced BFP8 
                 qlayers[name].set_quant_config(cfg)
             
-            mse_tmp =evaluator.evaluate(model, n_samples=search_samples)
+            mse_tmp =evaluator.evaluate(model, n_samples=search_samples, search_en=True)
             if mse_tmp < mse_th:
                 left = mid + 1
                 if mse_th == 1000:
@@ -262,7 +265,7 @@ if args.quant:
             qlayers[name].step_flag = -1 # keep as int8
             qlayers[name].set_quant_config(cfg)
         to_BFP8 = dict(list(layer_mse_sorted.items())[:left])
-        mx_specs = set_mx_specs(block_size=16, w_elem_format='int8', a_elem_format='int8')
+        mx_specs = set_mx_specs(block_size=args.block_size, w_elem_format='int8', a_elem_format='int8')
         cfg = quant_utils.QuantConfig('mx', mx_specs, None)
         for name in to_BFP8.keys():
             qlayers[name].step_flag = -3 # 3 for replaced BFP8 
@@ -271,31 +274,38 @@ if args.quant:
         loggings = f'step3: left INT8 to BFP8, mse_th = {mse_th}'
         mse_BFP8 = evaluator.evaluate(model, log_en=True, print_en=False)
         print(f'mse_BFP8: {mse_BFP8:.8f}')
-        with open('logs/model_structure/step3.txt', 'w') as f:
+        with open(f'logs/{args.model_name}/model_structure/step3.txt', 'w') as f:
             f.write(f'>>> Step3 Model <<< left INT8 to BFP8\n')
             f.write(str(model) + '\n\n')
+        '''
 
         print('----------Step4: enable smooth---------------')
+        if 'opt' in args.model_name:
+            smooth_module = ('q_proj', 'k_proj', 'v_proj', 'fc1')
         from mysmoothquant.smooth import smooth_lm
         smooth_factors = defaultdict(list)
-        act_scales = torch.load(f'act_scales/{args.model_id}.pt')
+        act_scales = torch.load(f'act_scales/{args.model_name}.pt')
         alphas = [i / 10 for i in range(1, 10)]
         for alpha in alphas:
             smooth_lm(model, act_scales, alpha, smooth_factors)
-
+        
         for name in qlayers:
+            if not name.endswith(smooth_module):
+                continue
             qlayers[name].y_mse_smoothquant_mean = [0 for _ in alphas]
             qlayers[name].step_flag = 4  # search smooth
 
             key = None
-            if name.endswith(('W_Q', 'W_K', 'W_V')):
-                key = name[:41] + '.W_Q'
+            if name.endswith(('q_proj', 'k_proj', 'v_proj')):
+                key = name[:-6] + 'q_proj'
             else: 
                 key = name
             qlayers[name].smooth_factors = smooth_factors[key]
         evaluator.evaluate(model, n_samples=search_samples)
         
         for name in qlayers:
+            if not name.endswith(('q_proj', 'k_proj', 'v_proj', 'fc1')):
+                continue
             quant_mse = qlayers[name].y_mse_quant_mean
             smoothquant_mse = qlayers[name].y_mse_smoothquant_mean
             min_idx, min_val = min(enumerate(smoothquant_mse), key=lambda x: x[1])
@@ -307,7 +317,7 @@ if args.quant:
         loggings = 'step4: enable smooth \n'
         mse_smooth =evaluator.evaluate(model, log_en=True, print_en=False)
         print(f'mse_smooth: {mse_smooth:.8f}')
-        with open('logs/model_structure/step4.txt', 'w') as f:
+        with open(f'logs/{args.model_name}/model_structure/step4.txt', 'w') as f:
             f.write(f'>>> Step4 Model <<< enable smooth\n')
             f.write(str(model) + '\n\n')
 

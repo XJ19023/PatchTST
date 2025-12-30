@@ -22,7 +22,7 @@ smooth:
 	minutes=$$(((delta % 3600) / 60)); \
 	echo "Time elapsed: $${hours}h-$${minutes}m"
 
-scale:
+scale_patchTST:
 	@start=$$(date +%s); \
 	seq_len=336; \
 	pred_len=720; \
@@ -32,8 +32,26 @@ scale:
 	traffic_fixed="--random_seed=2021 --is_training=0 --root_path=./dataset/ --data_path=$${model_id_name}.csv --model_id=$${model_id_name}_$${seq_len}_$${pred_len} --model=$$model_name --data=custom --features=M --seq_len=$${seq_len} --pred_len=$${pred_len} --enc_in 862 --e_layers 3 --n_heads 16 --d_model 128 --d_ff 256 --dropout 0.2 --fc_dropout 0.2 --head_dropout 0 --patch_len 16 --stride 8 --des Exp --train_epochs 100 --patience 10 --lradj 'TST' --pct_start 0.2 --itr 1 --batch_size 24 --learning_rate 0.0001"; \
 	fixed=$$traffic_fixed; \
 	for pred_len in 96; do \
-		python -u mysmoothquant/get_act_scale.py $${fixed} \
+		python -u mysmoothquant/get_act_scale_patchTST.py $${fixed} \
 		; \
+	done; \
+	end=$$(date +%s); \
+	delta=$$((end - start)); \
+	hours=$$((delta / 3600)); \
+	minutes=$$(((delta % 3600) / 60)); \
+	echo "\e[36mTime elapsed: $${hours}h-$${minutes}m\e[0m"
+
+scale_llm:
+	@methods="--eval_clamp --eval_clamp_qwt --wgt_nbit=4 --act_nbit=8"; \
+	methods="--eval_base --wgt_nbit=4 --act_nbit=8"; \
+	models="TinyLlama-1.1B-Chat-v1.0 llama-2-7b-hf Qwen2.5-7B"; \
+	models="opt-125m"; \
+	tasks="wikitext"; \
+	start=$$(date +%s); \
+	for model in $$models; do \
+		for task in $$tasks; do \
+			CUDA_VISIBLE_DEVICES=0 python mysmoothquant/get_act_scale.py --model_name=$$model; \
+		done; \
 	done; \
 	end=$$(date +%s); \
 	delta=$$((end - start)); \
@@ -70,14 +88,14 @@ mac:
 ppl:
 	@methods="--eval_clamp --eval_clamp_qwt --wgt_nbit=4 --act_nbit=8"; \
 	methods="--eval_base --wgt_nbit=4 --act_nbit=8"; \
-	models="TinyLlama-1.1B-Chat-v1.0 llama-2-7b-hf Qwen2.5-7B"; \
+	models="TinyLlama-1.1B-Chat-v1.0 llama-2-7b-hf Qwen2.5-0.5B"; \
 	models="opt-125m"; \
 	tasks="wikitext"; \
 	start=$$(date +%s); \
 	for model in $$models; do \
 		for task in $$tasks; do \
 			CUDA_VISIBLE_DEVICES=0 python llm_eval.py --model_name=$$model \
-			--quant --separate \
+			--quant --search \
 			; \
 		done; \
 	done; \
