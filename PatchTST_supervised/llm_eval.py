@@ -158,7 +158,6 @@ if args.quant:
         ppl_th = ppl_int8 * 1.05
         # ppl_th = 0.2303
         print(f'ppl_int8: {ppl_int8:.8f}')
-        '''
         print(f'ppl_th: {ppl_th:.8f}')
         with open(f'logs/{args.model_name}/model_structure/step1.txt', 'w') as f:
             f.write(f'>>> Step1 Model <<< calculate INT8 as baseline\n')
@@ -277,14 +276,13 @@ if args.quant:
         with open(f'logs/{args.model_name}/model_structure/step3.txt', 'w') as f:
             f.write(f'>>> Step3 Model <<< left INT8 to BFP8\n')
             f.write(str(model) + '\n\n')
-        '''
 
         print('----------Step4: enable smooth---------------')
         if 'opt' in args.model_name:
             smooth_module = ('q_proj', 'k_proj', 'v_proj', 'fc1')
         from mysmoothquant.smooth import smooth_lm
         smooth_factors = defaultdict(list)
-        act_scales = torch.load(f'act_scales/{args.model_name}.pt')
+        act_scales = torch.load(f'act_scales/{args.model_name}.pt', weights_only=True)
         alphas = [i / 10 for i in range(1, 10)]
         for alpha in alphas:
             smooth_lm(model, act_scales, alpha, smooth_factors)

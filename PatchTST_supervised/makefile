@@ -1,18 +1,18 @@
 models = TinyLlama-1.1B-Chat-v1.0 llama-2-7b-hf Meta-Llama-3-8B Llama-2-13b-hf opt-125m opt-1.3b opt-2.7b opt-6.7b opt-13b Qwen2.5-0.5B Qwen2.5-1.5B Qwen2.5-7B Qwen2.5-14B llama-7b-hf llama-13b-hf llama-30b-hf
 
-default: ppl
+default: PatchTST
 
 # SHELL := /bin/bash
-smooth:
+PatchTST:
 	@start=$$(date +%s); \
 	seq_len=336; \
-	pred_len=720; \
+	pred_len=336; \
 	model_name=PatchTST; \
-	model_id_name=electricity; \
+	model_id_name=weather; \
 	weather_fixed="--random_seed=2021 --is_training=0 --root_path=./dataset/ --data_path=$${model_id_name}.csv --model_id=$${model_id_name}_$${seq_len}_$${pred_len} --model=$$model_name --data=custom --features=M --seq_len=$${seq_len} --pred_len=$${pred_len} --enc_in=21 --e_layers=3 --n_heads=16 --d_model=128 --d_ff=256 --dropout=0.2 --fc_dropout=0.2 --head_dropout=0 --patch_len=16 --stride=8 --des=Exp --train_epochs=100 --patience=20 --itr=1 --batch_size=128 --learning_rate=0.0001"; \
 	electricity_fixed="--random_seed=2021 --is_training=0 --root_path=./dataset/ --data_path=$${model_id_name}.csv --model_id=$${model_id_name}_$${seq_len}_$${pred_len} --model=$$model_name --data=custom --features=M --seq_len=$${seq_len} --pred_len=$${pred_len} --enc_in=321 --e_layers=3 --n_heads=16 --d_model=128 --d_ff=256 --dropout=0.2 --fc_dropout=0.2 --head_dropout=0 --patch_len=16 --stride=8 --des=Exp --train_epochs=100 --patience=10 --itr=1 --batch_size=32 --learning_rate=0.0001"; \
 	traffic_fixed="--random_seed=2021 --is_training=0 --root_path=./dataset/ --data_path=$${model_id_name}.csv --model_id=$${model_id_name}_$${seq_len}_$${pred_len} --model=$$model_name --data=custom --features=M --seq_len=$${seq_len} --pred_len=$${pred_len} --enc_in 862 --e_layers 3 --n_heads 16 --d_model 128 --d_ff 256 --dropout 0.2 --fc_dropout 0.2 --head_dropout 0 --patch_len 16 --stride 8 --des Exp --train_epochs 100 --patience 10 --lradj 'TST' --pct_start 0.2 --itr 1 --batch_size 24 --learning_rate 0.0001"; \
-	fixed=$$electricity_fixed; \
+	fixed=$$weather_fixed; \
 		python -u mysmoothquant/run_smooth.py $${fixed} \
 		--quant --search \
 				; \
@@ -25,9 +25,10 @@ smooth:
 scale_patchTST:
 	@start=$$(date +%s); \
 	seq_len=336; \
-	pred_len=720; \
+	pred_len=336; \
 	model_name=PatchTST; \
 	model_id_name=traffic; \
+	weather_fixed="--random_seed=2021 --is_training=0 --root_path=./dataset/ --data_path=$${model_id_name}.csv --model_id=$${model_id_name}_$${seq_len}_$${pred_len} --model=$$model_name --data=custom --features=M --seq_len=$${seq_len} --pred_len=$${pred_len} --enc_in=21 --e_layers=3 --n_heads=16 --d_model=128 --d_ff=256 --dropout=0.2 --fc_dropout=0.2 --head_dropout=0 --patch_len=16 --stride=8 --des=Exp --train_epochs=100 --patience=20 --itr=1 --batch_size=128 --learning_rate=0.0001"; \
 	electricity_fixed="--random_seed=2021 --is_training=0 --root_path=./dataset/ --data_path=$${model_id_name}.csv --model_id=$${model_id_name}_$${seq_len}_$${pred_len} --model=$$model_name --data=custom --features=M --seq_len=$${seq_len} --pred_len=$${pred_len} --enc_in=321 --e_layers=3 --n_heads=16 --d_model=128 --d_ff=256 --dropout=0.2 --fc_dropout=0.2 --head_dropout=0 --patch_len=16 --stride=8 --des=Exp --train_epochs=100 --patience=10 --itr=1 --batch_size=32 --learning_rate=0.0001"; \
 	traffic_fixed="--random_seed=2021 --is_training=0 --root_path=./dataset/ --data_path=$${model_id_name}.csv --model_id=$${model_id_name}_$${seq_len}_$${pred_len} --model=$$model_name --data=custom --features=M --seq_len=$${seq_len} --pred_len=$${pred_len} --enc_in 862 --e_layers 3 --n_heads 16 --d_model 128 --d_ff 256 --dropout 0.2 --fc_dropout 0.2 --head_dropout 0 --patch_len 16 --stride 8 --des Exp --train_epochs 100 --patience 10 --lradj 'TST' --pct_start 0.2 --itr 1 --batch_size 24 --learning_rate 0.0001"; \
 	fixed=$$traffic_fixed; \

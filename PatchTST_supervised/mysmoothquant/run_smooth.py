@@ -265,7 +265,7 @@ if __name__ == '__main__':
 
             mse_int8 = evaluate(n_samples=cal_mse_samples) # use int8 as baseline
             mse_th = mse_int8 * 1.0001
-            mse_th = 0.2303
+            mse_th = 0.26029
             print(f'mse_int8: {mse_int8:.8f}')
             print(f'mse_th: {mse_th:.8f}')
             with open('logs/model_structure/step1.txt', 'w') as f:
@@ -331,7 +331,7 @@ if __name__ == '__main__':
                 f.write(str(model) + '\n\n')
 
             print('----------Step3: left int8 layers to BFP8---------------')
-            mse_th = 0.3266
+            mse_th = 0.2602
             layer_mse = {}
             for name in qlayers:
                 if qlayers[name].step_flag == -1: # frize 4 btis
@@ -354,7 +354,7 @@ if __name__ == '__main__':
                 mx_specs = set_mx_specs(block_size=16, w_elem_format='int8', a_elem_format='int8')
                 cfg = quant_utils.QuantConfig('mx', mx_specs, None)
                 for name in to_BFP8.keys():
-                    qlayers[name].step_flag = 3 # 3 for replaced BFP8 
+                    qlayers[name].step_flag = 3 # 3 for replaced BFP8
                     qlayers[name].set_quant_config(cfg)
                 
                 mse_tmp = evaluate(n_samples=cal_mse_samples)
@@ -375,7 +375,7 @@ if __name__ == '__main__':
             mx_specs = set_mx_specs(block_size=16, w_elem_format='int8', a_elem_format='int8')
             cfg = quant_utils.QuantConfig('mx', mx_specs, None)
             for name in to_BFP8.keys():
-                qlayers[name].step_flag = -3 # 3 for replaced BFP8 
+                qlayers[name].step_flag = -3 # 3 for replaced BFP8
                 qlayers[name].set_quant_config(cfg)
             
             loggings = f'step3: left INT8 to BFP8, mse_th = {mse_th}'
@@ -394,7 +394,7 @@ if __name__ == '__main__':
                 smooth_lm(model, act_scales, alpha, smooth_factors)
 
             for name in qlayers:
-                qlayers[name].y_mse_smoothquant_mean = [0 for _ in alphas]
+                qlayers[name].y_kl_smoothquant_mean = [0 for _ in alphas]
                 qlayers[name].step_flag = 4  # search smooth
 
                 key = None
@@ -406,11 +406,11 @@ if __name__ == '__main__':
             evaluate(n_samples=cal_mse_samples)
             
             for name in qlayers:
-                quant_mse = qlayers[name].y_mse_quant_mean
-                smoothquant_mse = qlayers[name].y_mse_smoothquant_mean
-                min_idx, min_val = min(enumerate(smoothquant_mse), key=lambda x: x[1])
+                quant_kl = qlayers[name].y_kl_quant_mean
+                smoothquant_kl = qlayers[name].y_kl_smoothquant_mean
+                min_idx, min_val = min(enumerate(smoothquant_kl), key=lambda x: x[1])
                 # print(f'{quant_mse:.8f}, {min_val:.8f}, {min_val < quant_mse}')
-                if min_val < quant_mse:
+                if min_val < quant_kl:
                     qlayers[name].smooth_factor = qlayers[name].smooth_factors[min_idx]
                     qlayers[name].cfg.alpha = (min_idx + 1) / 10
 

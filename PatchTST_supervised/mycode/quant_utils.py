@@ -28,11 +28,13 @@ class QuantWrapper(torch.nn.Module):
         self.name = False
         self.smooth_factors = None
         self.smooth_factor = None
-        self.loss_func = mse
+        self.loss_func = mse # to select quant data format
+        self.smooth_loss_func = mse # to select smooth en
         self.n_samples = None
         self.step_flag = None
-        self.y_mse_quant_mean = 0 # calculate once, then stored as baseline
-        self.y_mse_smoothquant_mean = None # calculate once, then stored as baseline
+        self.y_mse_quant_mean = 0 # calculate once, use for quant order
+        self.y_kl_quant_mean = 0 # use for smooth
+        # self.y_mse_smoothquant_mean = None 
         self.iters = 0
         self.using_BFP4 = False
 
@@ -122,14 +124,14 @@ class QuantWrapper(torch.nn.Module):
             y_quant = torch.functional.F.linear(x_quant, w_quant, self.bias)
             # x_mse_quant = self.loss_func(x, x_quant)
             # w_mse_quant = self.loss_func(self.weight, w_quant)
-            y_mse_quant = self.loss_func(y_org, y_quant)
+            y_kl_quant = self.smooth_loss_func(y_org, y_quant)
             # self.x_mse_quant_mean += x_mse_quant
             # self.w_mse_quant_mean += w_mse_quant
-            self.y_mse_quant_mean += y_mse_quant
+            self.y_kl_quant_mean += y_kl_quant
             if self.iters == self.n_samples: 
                 # self.x_mse_quant_mean /= self.n_samples
                 # self.w_mse_quant_mean /= self.n_samples
-                self.y_mse_quant_mean /= self.n_samples
+                self.y_kl_quant_mean /= self.n_samples
                 # print(f'{self.name[23:]:<28}, {self.x_mse_quant_mean:.8f}, {self.w_mse_quant_mean:.8f}, {self.y_mse_quant_mean:.8f}')
                 # print(f'runtime: {self.name:<28}, {self.y_mse_quant_mean:.8f}, ')
 
@@ -143,15 +145,15 @@ class QuantWrapper(torch.nn.Module):
 
                 # x_mse_smoothquant = self.loss_func(x_smooth, x_smoothquant)
                 # w_mse_smoothquant = self.loss_func(w_smooth, w_smoothquant)
-                y_mse_smoothquant = self.loss_func(y_org, y_smoothquant)
+                y_kl_smoothquant = self.smooth_loss_func(y_org, y_smoothquant)
 
                 # self.x_mse_smoothquant_mean += x_mse_smoothquant
                 # self.w_mse_smoothquant_mean += w_mse_smoothquant
-                self.y_mse_smoothquant_mean[alpha_idx] += y_mse_smoothquant
+                self.y_kl_smoothquant_mean[alpha_idx] += y_kl_smoothquant
                 if self.iters == self.n_samples: 
                     # self.x_mse_smoothquant_mean /= self.n_samples
                     # self.w_mse_smoothquant_mean /= self.n_samples
-                    self.y_mse_smoothquant_mean[alpha_idx] /= self.n_samples
+                    self.y_kl_smoothquant_mean[alpha_idx] /= self.n_samples
                     # print(f'{self.y_mse_smoothquant_mean:.8f}, ', end='')
                     # print(f'{self.cfg.alpha_idx}: {self.name[23:]:<28}, ({self.x_mse_quant_mean:.8f}, {self.x_mse_smoothquant_mean:.8f}), ({self.w_mse_quant_mean:.8f}, {self.w_mse_smoothquant_mean:.8f}), ({self.y_mse_quant_mean:.8f}, {self.y_mse_smoothquant_mean:.8f}), {self.y_mse_quant_mean > self.y_mse_smoothquant_mean}')
                     self.step_flag = -4
