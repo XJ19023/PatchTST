@@ -37,6 +37,8 @@ class QuantWrapper(torch.nn.Module):
         # self.y_mse_smoothquant_mean = None 
         self.iters = 0
         self.using_BFP4 = False
+        self.store_fp32 = True
+        self.y_fp32 = None
 
     def set_quant_config(self, cfg: QuantConfig):
         self.cfg = replace(cfg)
@@ -100,9 +102,9 @@ class QuantWrapper(torch.nn.Module):
                 self.y_mse_intquant_mean /= self.n_samples
                 self.y_mse_mxquant_mean /= self.n_samples
 
-                # print(f'{self.y_mse_intquant_mean:.8f}, {self.y_mse_mxquant_mean:.8f}, {self.y_mse_intquant_mean >= self.y_mse_mxquant_mean}')
+                # print(f'{self.y_mse_intquant_mean:.8f}, {self.y_mse_mxquant_mean:.8f}, {self.y_mse_mxquant_mean / self.y_mse_intquant_mean:.2f}')
 
-                if self.y_mse_intquant_mean * 2 >= self.y_mse_mxquant_mean:
+                if self.y_mse_intquant_mean * 1.2 >= self.y_mse_mxquant_mean:
                 # if True:
                     self.using_BFP4 = True
                     self.cfg.quant_meth = 'mx'
@@ -117,23 +119,22 @@ class QuantWrapper(torch.nn.Module):
             return y_org
             
         elif self.step_flag == 4:
+            if self.store_fp32:
+                y_fp32 = torch.functional.F.linear(x, self.weight, self.bias)
+                torch.save(y_fp32, f'logs/output/{self.name}.pt')
+                self.store_fp32 = False
+                return y_fp32
+            else:
+                y_fp32 = torch.load(f'logs/output/{self.name}.pt')
+                self.store_fp32 = True
             self.iters += 1
-            y_org = torch.functional.F.linear(x, self.weight, self.bias)
             x_quant = self.quant_func(x, self.cfg.quant_specs)
             w_quant = self.quant_func(self.weight, self.cfg.quant_specs)
             y_quant = torch.functional.F.linear(x_quant, w_quant, self.bias)
-            # x_mse_quant = self.loss_func(x, x_quant)
-            # w_mse_quant = self.loss_func(self.weight, w_quant)
-            y_kl_quant = self.smooth_loss_func(y_org, y_quant)
-            # self.x_mse_quant_mean += x_mse_quant
-            # self.w_mse_quant_mean += w_mse_quant
+            y_kl_quant = self.smooth_loss_func(y_fp32, y_quant)
             self.y_kl_quant_mean += y_kl_quant
             if self.iters == self.n_samples: 
-                # self.x_mse_quant_mean /= self.n_samples
-                # self.w_mse_quant_mean /= self.n_samples
                 self.y_kl_quant_mean /= self.n_samples
-                # print(f'{self.name[23:]:<28}, {self.x_mse_quant_mean:.8f}, {self.w_mse_quant_mean:.8f}, {self.y_mse_quant_mean:.8f}')
-                # print(f'runtime: {self.name:<28}, {self.y_mse_quant_mean:.8f}, ')
 
             for alpha_idx, smooth_factor in enumerate(self.smooth_factors):
                 smooth_factor =  smooth_factor.view(1, -1).to(device=x.device)
@@ -143,21 +144,13 @@ class QuantWrapper(torch.nn.Module):
                 w_smoothquant = self.quant_func(w_smooth, self.cfg.quant_specs)
                 y_smoothquant = torch.functional.F.linear(x_smoothquant, w_smoothquant, self.bias)
 
-                # x_mse_smoothquant = self.loss_func(x_smooth, x_smoothquant)
-                # w_mse_smoothquant = self.loss_func(w_smooth, w_smoothquant)
-                y_kl_smoothquant = self.smooth_loss_func(y_org, y_smoothquant)
+                y_kl_smoothquant = self.smooth_loss_func(y_fp32, y_smoothquant)
 
-                # self.x_mse_smoothquant_mean += x_mse_smoothquant
-                # self.w_mse_smoothquant_mean += w_mse_smoothquant
                 self.y_kl_smoothquant_mean[alpha_idx] += y_kl_smoothquant
                 if self.iters == self.n_samples: 
-                    # self.x_mse_smoothquant_mean /= self.n_samples
-                    # self.w_mse_smoothquant_mean /= self.n_samples
                     self.y_kl_smoothquant_mean[alpha_idx] /= self.n_samples
-                    # print(f'{self.y_mse_smoothquant_mean:.8f}, ', end='')
-                    # print(f'{self.cfg.alpha_idx}: {self.name[23:]:<28}, ({self.x_mse_quant_mean:.8f}, {self.x_mse_smoothquant_mean:.8f}), ({self.w_mse_quant_mean:.8f}, {self.w_mse_smoothquant_mean:.8f}), ({self.y_mse_quant_mean:.8f}, {self.y_mse_smoothquant_mean:.8f}), {self.y_mse_quant_mean > self.y_mse_smoothquant_mean}')
                     self.step_flag = -4
-            return y_org
+            return y_quant
         
         # elif self.initial_weight:
         #     if self.cfg.smooth_en:

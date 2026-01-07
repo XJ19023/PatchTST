@@ -25,13 +25,46 @@ import transformers.models.llama.modeling_llama
 import mycode.quant_utils as quant_utils
 from collections import defaultdict
 
-def evaluate(n_samples=None, log_en=False, print_en=True):
-    mse, mae = exp.test(setting, test=1, n_samples=n_samples) # inference
+from data_provider.data_factory import data_provider
+from torch.utils.data import DataLoader, Subset
+
+def get_data(flag, args):
+    data_set, data_loader = data_provider(args, flag)
+    return data_set, data_loader
+
+def select_best_index(vec, th):
+    A, B, C = torch.tensor(vec[0]), torch.tensor(vec[1]), torch.tensor(vec[2])
+    a, b, c = th[0], th[1], th[2]
+    # print(A < a)
+    # print(B < b)
+    # print(C < c)
+    mask = (A < a) & (B < b) & (C < c)
+
+    if mask.sum() == 0:
+        return None
+
+    mean_vals = (A + B + C) / 3
+    mean_vals_masked = mean_vals.clone()
+    mean_vals_masked[~mask] = float('inf')
+
+    best_idx = torch.argmin(mean_vals_masked).item()
+    if best_idx is not None:
+        print(f'{A[best_idx]:.6f}, {(best_idx + 1) / 10}, {a-A[best_idx]:.6f}, {a/A[best_idx]:.6f}')
+        print(f'{B[best_idx]:.6f}, {(best_idx + 1) / 10}, {b-B[best_idx]:.6f}, {b/B[best_idx]:.6f}')
+        print(f'{C[best_idx]:.6f}, {(best_idx + 1) / 10}, {c-C[best_idx]:.6f}, {c/C[best_idx]:.6f}')
+        if a/A[best_idx] < 1.01 or b/B[best_idx] < 1.01 or c/C[best_idx] < 1.01: 
+            best_idx = None
+    return best_idx
+
+def evaluate(n_samples=None, test_loader=None, log_en=False, print_en=True):
+    if test_loader is None:
+        _, test_loader = get_data(flag='test', args=args) # default for evaluate
+    mse, mae = exp.test(setting, test=1, n_samples=n_samples, test_loader=test_loader) # inference
     torch.cuda.empty_cache()
     if print_en:
         print('MSE: {}, MAE: {}'.format(mse, mae))
     if log_en:
-        with open(f"logs/{args.model_id}.txt", 'a') as f:
+        with open(f"logs/{args.model_id}/result.txt", 'a') as f:
             f.write(f"mse:{mse:.8f}, {loggings}")
             f.write('\n')
     return mse
@@ -104,7 +137,7 @@ if __name__ == '__main__':
     parser.add_argument('--do_predict', action='store_true', help='whether to predict unseen future data')
 
     # optimization
-    parser.add_argument('--num_workers', type=int, default=10, help='data loader num workers')
+    parser.add_argument('--num_workers', type=int, default=2, help='data loader num workers')
     parser.add_argument('--itr', type=int, default=2, help='experiments times')
     parser.add_argument('--train_epochs', type=int, default=100, help='train epochs')
     parser.add_argument('--batch_size', type=int, default=128, help='batch size of train input data')
@@ -149,6 +182,7 @@ if __name__ == '__main__':
 #     help='Modules to apply smooth'
 # )
     args = parser.parse_args()
+    torch.cuda.reset_peak_memory_stats()
 
     # random seed
     fix_seed = args.random_seed
@@ -184,7 +218,9 @@ if __name__ == '__main__':
     exp = Exp(args)
     model = exp.model
 
-    with open('logs/model_structure/orginal_model.txt', 'w') as f:
+    import os
+    os.makedirs(f'logs/{args.model_id}', exist_ok=True)
+    with open(f'logs/{args.model_id}/orginal_model.txt', 'w') as f:
         f.write(f'>>> Original Model <<<\n')
         f.write(str(model) + '\n\n')
 
@@ -209,6 +245,23 @@ if __name__ == '__main__':
 
     print('loading model')
     model.load_state_dict(torch.load(os.path.join('./checkpoints/' + setting, 'checkpoint.pth')))
+
+
+    # args.batch_size = 128
+    data_set, _ = get_data(flag='test', args=args) # default batch_size for smooth search
+    cal_mse_samples = 32
+    num_samples = min(cal_mse_samples * args.batch_size, len(data_set))
+    indices = np.random.choice(len(data_set), num_samples, replace=False)
+    # 创建一个Subset对象，这样你就只会从数据集里得到这100个样本
+    subset = Subset(data_set, indices)
+    # 使用这个Subset创建一个新的DataLoader
+    dataset_for_search_format = DataLoader(subset, batch_size=args.batch_size, shuffle=False)
+
+    # for idx, item in enumerate(dataset_for_search_format):
+    #     print(idx, item[0].shape)
+    # print(indices)
+    # exit()
+
 
     if args.org:
         loggings = f'org'
@@ -253,9 +306,8 @@ if __name__ == '__main__':
                 evaluate(log_en=True)
 
         if args.search:
+            mse_th_step2, mse_th_step3 = 1000, 1000
             print('----------Step1: calculate baseline---------------')
-            max_n_samples = exp.test(get_max_samples=True)         
-            cal_mse_samples = min(32, max_n_samples)
             for name in qlayers:
                 qlayers[name].name = name
                 qlayers[name].step_flag = 1  # 1 for int8 mse as baseline
@@ -263,12 +315,11 @@ if __name__ == '__main__':
                 cfg = quant_utils.QuantConfig('int', {'n_bits': 8}, None)
                 qlayers[name].set_quant_config(cfg)
 
-            mse_int8 = evaluate(n_samples=cal_mse_samples) # use int8 as baseline
+            mse_int8 = evaluate(test_loader=dataset_for_search_format) # use int8 as baseline
             mse_th = mse_int8 * 1.0001
-            mse_th = 0.26029
             print(f'mse_int8: {mse_int8:.8f}')
-            print(f'mse_th: {mse_th:.8f}')
-            with open('logs/model_structure/step1.txt', 'w') as f:
+            print(f'mse_th: {mse_th_step2:.8f}')
+            with open(f'logs/{args.model_id}/step1.txt', 'w') as f:
                 f.write(f'>>> Step1 Model <<< calculate INT8 as baseline\n')
                 f.write(str(model) + '\n\n')
             
@@ -279,6 +330,7 @@ if __name__ == '__main__':
             layer_mse_sorted = dict(sorted(layer_mse.items(), key=lambda item: item[1]))
 
             left, right = 1, len(layer_mse_sorted) + 1 # [left, right)
+            left, right = 1, len(layer_mse_sorted) - 6 # [left, right)
             while (right > left):
                 mid = (right + left) // 2
                 print(left, right, mid, len(layer_mse_sorted), end=' ')
@@ -295,13 +347,13 @@ if __name__ == '__main__':
                     qlayers[name].step_flag = 2 # search for int4 or BFP4
                     qlayers[name].set_quant_config(cfg) # deliver mx_specs
                 
-                _ = evaluate(n_samples=cal_mse_samples, print_en=False) # search for int4 or BFP4
-                mse_tmp = evaluate(n_samples=cal_mse_samples)
+                _ = evaluate(test_loader=dataset_for_search_format, print_en=False) # search for int4 or BFP4
+                mse_tmp = evaluate(test_loader=dataset_for_search_format)
 
-                if mse_tmp < mse_th:
+                if mse_tmp < mse_th_step2:
                     left = mid + 1
-                    if mse_th == 1000:
-                        mse_th = mse_tmp
+                    if mse_th_step2 == 1000:
+                        mse_th_step2 = mse_tmp
                 else:
                     right = mid
 
@@ -322,16 +374,15 @@ if __name__ == '__main__':
                 else:
                     qlayers[name].set_quant_config(cfg_int) # deliver mx_specs
             
-            loggings = f'step2: INT8 to 4 bits, mse_th = {mse_th}'
-            mse_4bits = evaluate(log_en=True, print_en=False)
-            print(f'mse_4bits: {mse_4bits:.8f}')
+            # loggings = f'step2: INT8 to 4 bits, mse_th = {mse_th_step2}'
+            # mse_4bits = evaluate(log_en=True, print_en=False)
+            # print(f'mse_4bits: {mse_4bits:.8f}')
 
-            with open('logs/model_structure/step2.txt', 'w') as f:
-                f.write(f'>>> Step2 Model <<< INT8 to 4 bits\n')
-                f.write(str(model) + '\n\n')
+            # with open(f'logs/{args.model_id}/step2.txt', 'w') as f:
+            #     f.write(f'>>> Step2 Model <<< INT8 to 4 bits\n')
+            #     f.write(str(model) + '\n\n')
 
             print('----------Step3: left int8 layers to BFP8---------------')
-            mse_th = 0.2602
             layer_mse = {}
             for name in qlayers:
                 if qlayers[name].step_flag == -1: # frize 4 btis
@@ -357,11 +408,11 @@ if __name__ == '__main__':
                     qlayers[name].step_flag = 3 # 3 for replaced BFP8
                     qlayers[name].set_quant_config(cfg)
                 
-                mse_tmp = evaluate(n_samples=cal_mse_samples)
-                if mse_tmp < mse_th:
+                mse_tmp = evaluate(test_loader=dataset_for_search_format)
+                if mse_tmp < mse_th_step3:
                     left = mid + 1
-                    if mse_th == 1000:
-                        mse_th = mse_tmp
+                    if mse_th_step3 == 1000:
+                        mse_th_step3 = mse_tmp
                 else:
                     right = mid
 
@@ -378,23 +429,25 @@ if __name__ == '__main__':
                 qlayers[name].step_flag = -3 # 3 for replaced BFP8
                 qlayers[name].set_quant_config(cfg)
             
-            loggings = f'step3: left INT8 to BFP8, mse_th = {mse_th}'
-            mse_BFP8 = evaluate(log_en=True, print_en=False)
-            print(f'mse_BFP8: {mse_BFP8:.8f}')
-            with open('logs/model_structure/step3.txt', 'w') as f:
-                f.write(f'>>> Step3 Model <<< left INT8 to BFP8\n')
-                f.write(str(model) + '\n\n')
+            # loggings = f'step3: left INT8 to BFP8, mse_th = {mse_th_step3}'
+            # mse_BFP8 = evaluate(log_en=True, print_en=False)
+            # print(f'mse_BFP8: {mse_BFP8:.8f}')
+            # with open(f'logs/{args.model_id}/step3.txt', 'w') as f:
+            #     f.write(f'>>> Step3 Model <<< left INT8 to BFP8\n')
+            #     f.write(str(model) + '\n\n')
 
             print('----------Step4: enable smooth---------------')
+            num_samples = 8
             from mysmoothquant.smooth import smooth_lm
             smooth_factors = defaultdict(list)
             act_scales = torch.load(f'act_scales/{args.model_id}.pt')
-            alphas = [i / 10 for i in range(1, 10)]
+            alphas = [i / 10 for i in range(1, 5)]
             for alpha in alphas:
                 smooth_lm(model, act_scales, alpha, smooth_factors)
 
             for name in qlayers:
                 qlayers[name].y_kl_smoothquant_mean = [0 for _ in alphas]
+                qlayers[name].n_samples = num_samples
                 qlayers[name].step_flag = 4  # search smooth
 
                 key = None
@@ -403,25 +456,56 @@ if __name__ == '__main__':
                 else: 
                     key = name
                 qlayers[name].smooth_factors = smooth_factors[key]
-            evaluate(n_samples=cal_mse_samples)
+
+            data_set, _ = get_data(flag='test', args=args) # default batch_size for smooth search
+            # args.batch_size = 128
+            indices = np.random.choice(len(data_set), num_samples*args.batch_size, replace=False)
+            for indice in indices:
+                # 创建一个Subset对象，这样你就只会从数据集里得到这100个样本
+                subset = Subset(data_set, [indice])
+                # 使用这个Subset创建一个新的DataLoader
+                dataset_for_enable_smooth = DataLoader(subset, batch_size=args.batch_size, shuffle=False)
+
+                _ = evaluate(test_loader=dataset_for_enable_smooth, print_en=False)
+                _ = evaluate(test_loader=dataset_for_enable_smooth, print_en=False)
             
             for name in qlayers:
-                quant_kl = qlayers[name].y_kl_quant_mean
-                smoothquant_kl = qlayers[name].y_kl_smoothquant_mean
-                min_idx, min_val = min(enumerate(smoothquant_kl), key=lambda x: x[1])
-                # print(f'{quant_mse:.8f}, {min_val:.8f}, {min_val < quant_mse}')
-                if min_val < quant_kl:
-                    qlayers[name].smooth_factor = qlayers[name].smooth_factors[min_idx]
-                    qlayers[name].cfg.alpha = (min_idx + 1) / 10
+                if name.endswith(('W_Q', 'W_K', 'W_V')):
+                    if name.endswith(('W_Q', )):
+                        name_qkv = []
+                        quant_kl_th = []
+                        smoothquant_kl = []
+                    name_qkv.append(name)
+                    quant_kl_th.append(qlayers[name].y_kl_quant_mean)
+                    smoothquant_kl.append(qlayers[name].y_kl_smoothquant_mean)
+                    if name.endswith(('W_V', )):
+                        alpha_idx = select_best_index(smoothquant_kl, quant_kl_th)
+                        if alpha_idx is not None:
+                            for layer_name in name_qkv:
+                                qlayers[layer_name].smooth_factor = qlayers[layer_name].smooth_factors[alpha_idx]
+                                qlayers[layer_name].cfg.alpha = (alpha_idx + 1) / 10
+                else:
+                    quant_kl = qlayers[name].y_kl_quant_mean
+                    smoothquant_kl = qlayers[name].y_kl_smoothquant_mean
+                    min_idx, min_val = min(enumerate(smoothquant_kl), key=lambda x: x[1])
+                    # print(f'{quant_mse:.8f}, {min_val:.8f}, {min_val < quant_mse}')
+                    if min_val < quant_kl:
+                        print(f'\n{quant_kl:.6f}, {name}')
+                        print(f'{min_val:.6f}, {(min_idx + 1) / 10}, {quant_kl-min_val:.6f}, {quant_kl/min_val:.6f}')
+                        if quant_kl > min_val * 1.01:
+                            qlayers[name].smooth_factor = qlayers[name].smooth_factors[min_idx]
+                            qlayers[name].cfg.alpha = (min_idx + 1) / 10
 
-            loggings = 'step4: enable smooth \n'
+
+            loggings = f'step4: enable smooth, smooth_samples={num_samples} \n'
             mse_smooth = evaluate(log_en=True, print_en=False)
             print(f'mse_smooth: {mse_smooth:.8f}')
-            with open('logs/model_structure/step4.txt', 'w') as f:
+            with open(f'logs/{args.model_id}/step4.txt', 'w') as f:
                 f.write(f'>>> Step4 Model <<< enable smooth\n')
                 f.write(str(model) + '\n\n')
 
             print('----------final quantized model---------------')
+            print("Peak allocated:", torch.cuda.max_memory_allocated() / 1024**3, "GB")
 
 
         
