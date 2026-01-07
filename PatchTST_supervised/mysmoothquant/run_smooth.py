@@ -8,6 +8,7 @@
 
 import argparse
 import functools
+import json
 import math
 import os
 import sys
@@ -28,12 +29,35 @@ from collections import defaultdict
 from data_provider.data_factory import data_provider
 from torch.utils.data import DataLoader, Subset
 
+
+def export_quant_config(save_path):
+    qcfg = {}
+    for name in qlayers:
+        qlayers[name].save_quant_cfg()
+        qcfg[name] = qlayers[name].quant_cfg
+
+    with open(save_path, "w") as f:
+        json.dump(qcfg, f, indent=2)
+
+def load_quant_config(cfg_path):
+    with open(cfg_path) as f:
+        qcfg = json.load(f)
+    for name in qlayers:
+        if qcfg[name]['quant_meth'] == 'int':
+            cfg = quant_utils.QuantConfig('int', {'n_bits': qcfg[name]['quant_bits']}, None)
+            qlayers[name].set_quant_config(cfg)
+        if qcfg[name]['quant_meth'] == 'mx':
+            mx_specs = set_mx_specs(block_size=16, w_elem_format=f"int{qcfg[name]['quant_bits']}", a_elem_format=f"int{qcfg[name]['quant_bits']}")
+            cfg = quant_utils.QuantConfig('mx', mx_specs, None) # deliver mx_specs
+            qlayers[name].set_quant_config(cfg)
+
+
 def get_data(flag, args):
     data_set, data_loader = data_provider(args, flag)
     return data_set, data_loader
 
 def select_best_index(vec, th):
-    A, B, C = torch.tensor(vec[0]), torch.tensor(vec[1]), torch.tensor(vec[2])
+    A, B, C = torch.tensor(vec[0], device='cuda'), torch.tensor(vec[1], device='cuda'), torch.tensor(vec[2], device='cuda')
     a, b, c = th[0], th[1], th[2]
     # print(A < a)
     # print(B < b)
@@ -271,6 +295,8 @@ if __name__ == '__main__':
     if args.quant:
         quant_utils.add_quant(model)
         qlayers = quant_utils.find_qlayers(model)
+        for name in qlayers:
+            qlayers[name].name = name
 
         if args.separate: 
             cal_mse_space = []
@@ -285,7 +311,6 @@ if __name__ == '__main__':
 
             for idx, cfg in enumerate(cal_mse_space):
                 for name in qlayers:
-                    qlayers[name].name = name
                     qlayers[name].set_quant_config(cfg)
 
                 if args.hook:
@@ -306,142 +331,153 @@ if __name__ == '__main__':
                 evaluate(log_en=True)
 
         if args.search:
-            mse_th_step2, mse_th_step3 = 1000, 1000
-            print('----------Step1: calculate baseline---------------')
-            for name in qlayers:
-                qlayers[name].name = name
-                qlayers[name].step_flag = 1  # 1 for int8 mse as baseline
-                qlayers[name].n_samples = cal_mse_samples
-                cfg = quant_utils.QuantConfig('int', {'n_bits': 8}, None)
-                qlayers[name].set_quant_config(cfg)
-
-            mse_int8 = evaluate(test_loader=dataset_for_search_format) # use int8 as baseline
-            mse_th = mse_int8 * 1.0001
-            print(f'mse_int8: {mse_int8:.8f}')
-            print(f'mse_th: {mse_th_step2:.8f}')
-            with open(f'logs/{args.model_id}/step1.txt', 'w') as f:
-                f.write(f'>>> Step1 Model <<< calculate INT8 as baseline\n')
-                f.write(str(model) + '\n\n')
-            
-            print('----------Step2: int8 layers to 4 bits---------------')
-            layer_mse = {}
-            for name in qlayers:
-                layer_mse[name] = qlayers[name].y_mse_quant_mean
-            layer_mse_sorted = dict(sorted(layer_mse.items(), key=lambda item: item[1]))
-
-            left, right = 1, len(layer_mse_sorted) + 1 # [left, right)
-            left, right = 1, len(layer_mse_sorted) - 6 # [left, right)
-            while (right > left):
-                mid = (right + left) // 2
-                print(left, right, mid, len(layer_mse_sorted), end=' ')
-
-                to_4bits = dict(list(layer_mse_sorted.items())[:mid])
-                keep_int8 = dict(list(layer_mse_sorted.items())[mid:])
-                cfg = quant_utils.QuantConfig('int', {'n_bits': 8}, None)
-                for name in keep_int8.keys():
-                    qlayers[name].step_flag = -1 # keep as int8
+            load_cfg = True
+            if load_cfg:
+                load_quant_config(f'logs/{args.model_id}/quant_cfg.json')
+                loggings = f'step3: left INT8 to BFP8, load cfg'
+                mse_BFP8 = evaluate(log_en=True, print_en=False)
+                print(f'mse_BFP8: {mse_BFP8:.8f}')
+                with open(f'logs/{args.model_id}/load.txt', 'w') as f:
+                    f.write(f'>>> Step3 Model <<< left INT8 to BFP8\n')
+                    f.write(str(model) + '\n\n')
+            else:  
+                mse_th_step2, mse_th_step3 = 1000, 1000
+                print('----------Step1: calculate baseline---------------')
+                for name in qlayers:
+                    qlayers[name].step_flag = 1  # 1 for int8 mse as baseline
+                    qlayers[name].n_samples = cal_mse_samples
+                    cfg = quant_utils.QuantConfig('int', {'n_bits': 8}, None)
                     qlayers[name].set_quant_config(cfg)
-                mx_specs = set_mx_specs(block_size=16, w_elem_format='int4', a_elem_format='int4')
-                cfg = quant_utils.QuantConfig(None, mx_specs, None) # deliver mx_specs
-                for name in to_4bits.keys():
-                    qlayers[name].step_flag = 2 # search for int4 or BFP4
-                    qlayers[name].set_quant_config(cfg) # deliver mx_specs
+
+                mse_int8 = evaluate(test_loader=dataset_for_search_format) # use int8 as baseline
+                mse_th = mse_int8 * 1.0001
+                print(f'mse_int8: {mse_int8:.8f}')
+                print(f'mse_th: {mse_th_step2:.8f}')
+                with open(f'logs/{args.model_id}/step1.txt', 'w') as f:
+                    f.write(f'>>> Step1 Model <<< calculate INT8 as baseline\n')
+                    f.write(str(model) + '\n\n')
                 
-                _ = evaluate(test_loader=dataset_for_search_format, print_en=False) # search for int4 or BFP4
-                mse_tmp = evaluate(test_loader=dataset_for_search_format)
-
-                if mse_tmp < mse_th_step2:
-                    left = mid + 1
-                    if mse_th_step2 == 1000:
-                        mse_th_step2 = mse_tmp
-                else:
-                    right = mid
-
-            left -= 1
-            keep_int8 = dict(list(layer_mse_sorted.items())[left:])
-            cfg = quant_utils.QuantConfig('int', {'n_bits': 8}, None)
-            for name in keep_int8.keys():
-                qlayers[name].step_flag = -1 # keep as int8
-                qlayers[name].set_quant_config(cfg)
-            to_4bits = dict(list(layer_mse_sorted.items())[:left])
-            mx_specs = set_mx_specs(block_size=16, w_elem_format='int4', a_elem_format='int4')
-            cfg_mx = quant_utils.QuantConfig('mx', mx_specs, None)
-            cfg_int = quant_utils.QuantConfig('int', {'n_bits': 4}, None)
-            for name in to_4bits.keys():
-                qlayers[name].step_flag = -2 # 2 for replaced 4 bits
-                if qlayers[name].using_BFP4:
-                    qlayers[name].set_quant_config(cfg_mx) # deliver mx_specs
-                else:
-                    qlayers[name].set_quant_config(cfg_int) # deliver mx_specs
-            
-            # loggings = f'step2: INT8 to 4 bits, mse_th = {mse_th_step2}'
-            # mse_4bits = evaluate(log_en=True, print_en=False)
-            # print(f'mse_4bits: {mse_4bits:.8f}')
-
-            # with open(f'logs/{args.model_id}/step2.txt', 'w') as f:
-            #     f.write(f'>>> Step2 Model <<< INT8 to 4 bits\n')
-            #     f.write(str(model) + '\n\n')
-
-            print('----------Step3: left int8 layers to BFP8---------------')
-            layer_mse = {}
-            for name in qlayers:
-                if qlayers[name].step_flag == -1: # frize 4 btis
+                print('----------Step2: int8 layers to 4 bits---------------')
+                layer_mse = {}
+                for name in qlayers:
                     layer_mse[name] = qlayers[name].y_mse_quant_mean
-            layer_mse_sorted = dict(sorted(layer_mse.items(), key=lambda item: item[1]))
+                layer_mse_sorted = dict(sorted(layer_mse.items(), key=lambda item: item[1]))
 
-            left, right = 1, len(layer_mse_sorted) + 1
-            while (right > left):
-                if len(layer_mse_sorted) == 0:
-                    break
-                mid = (right + left) // 2
-                print(left, right, mid, len(layer_mse_sorted), end=' ')
+                left, right = 1, len(layer_mse_sorted) + 1 # [left, right)
+                left, right = 1, len(layer_mse_sorted) - 6 # [left, right)
+                while (right > left):
+                    mid = (right + left) // 2
+                    print(left, right, mid, len(layer_mse_sorted), end=' ')
 
-                keep_int8 = dict(list(layer_mse_sorted.items())[mid:])
+                    to_4bits = dict(list(layer_mse_sorted.items())[:mid])
+                    keep_int8 = dict(list(layer_mse_sorted.items())[mid:])
+                    cfg = quant_utils.QuantConfig('int', {'n_bits': 8}, None)
+                    for name in keep_int8.keys():
+                        qlayers[name].step_flag = -1 # keep as int8
+                        qlayers[name].set_quant_config(cfg)
+                    mx_specs = set_mx_specs(block_size=16, w_elem_format='int4', a_elem_format='int4')
+                    cfg = quant_utils.QuantConfig(None, mx_specs, None) # deliver mx_specs
+                    for name in to_4bits.keys():
+                        qlayers[name].step_flag = 2 # search for int4 or BFP4
+                        qlayers[name].set_quant_config(cfg) # deliver mx_specs
+                    
+                    _ = evaluate(test_loader=dataset_for_search_format, print_en=False) # search for int4 or BFP4
+                    mse_tmp = evaluate(test_loader=dataset_for_search_format)
+
+                    if mse_tmp < mse_th_step2:
+                        left = mid + 1
+                        if mse_th_step2 == 1000:
+                            mse_th_step2 = mse_tmp
+                    else:
+                        right = mid
+
+                left -= 1
+                keep_int8 = dict(list(layer_mse_sorted.items())[left:])
                 cfg = quant_utils.QuantConfig('int', {'n_bits': 8}, None)
                 for name in keep_int8.keys():
                     qlayers[name].step_flag = -1 # keep as int8
                     qlayers[name].set_quant_config(cfg)
-                to_BFP8 = dict(list(layer_mse_sorted.items())[:mid])
+                to_4bits = dict(list(layer_mse_sorted.items())[:left])
+                mx_specs = set_mx_specs(block_size=16, w_elem_format='int4', a_elem_format='int4')
+                cfg_mx = quant_utils.QuantConfig('mx', mx_specs, None)
+                cfg_int = quant_utils.QuantConfig('int', {'n_bits': 4}, None)
+                for name in to_4bits.keys():
+                    qlayers[name].step_flag = -2 # 2 for replaced 4 bits
+                    if qlayers[name].using_BFP4:
+                        qlayers[name].set_quant_config(cfg_mx) # deliver mx_specs
+                    else:
+                        qlayers[name].set_quant_config(cfg_int) # deliver mx_specs
+                
+                # loggings = f'step2: INT8 to 4 bits, mse_th = {mse_th_step2}'
+                # mse_4bits = evaluate(log_en=True, print_en=False)
+                # print(f'mse_4bits: {mse_4bits:.8f}')
+
+                # with open(f'logs/{args.model_id}/step2.txt', 'w') as f:
+                #     f.write(f'>>> Step2 Model <<< INT8 to 4 bits\n')
+                #     f.write(str(model) + '\n\n')
+
+                print('----------Step3: left int8 layers to BFP8---------------')
+                layer_mse = {}
+                for name in qlayers:
+                    if qlayers[name].step_flag == -1: # frize 4 btis
+                        layer_mse[name] = qlayers[name].y_mse_quant_mean
+                layer_mse_sorted = dict(sorted(layer_mse.items(), key=lambda item: item[1]))
+
+                left, right = 1, len(layer_mse_sorted) + 1
+                while (right > left):
+                    if len(layer_mse_sorted) == 0:
+                        break
+                    mid = (right + left) // 2
+                    print(left, right, mid, len(layer_mse_sorted), end=' ')
+
+                    keep_int8 = dict(list(layer_mse_sorted.items())[mid:])
+                    cfg = quant_utils.QuantConfig('int', {'n_bits': 8}, None)
+                    for name in keep_int8.keys():
+                        qlayers[name].step_flag = -1 # keep as int8
+                        qlayers[name].set_quant_config(cfg)
+                    to_BFP8 = dict(list(layer_mse_sorted.items())[:mid])
+                    mx_specs = set_mx_specs(block_size=16, w_elem_format='int8', a_elem_format='int8')
+                    cfg = quant_utils.QuantConfig('mx', mx_specs, None)
+                    for name in to_BFP8.keys():
+                        qlayers[name].step_flag = 3 # 3 for replaced BFP8
+                        qlayers[name].set_quant_config(cfg)
+                    
+                    mse_tmp = evaluate(test_loader=dataset_for_search_format)
+                    if mse_tmp < mse_th_step3:
+                        left = mid + 1
+                        if mse_th_step3 == 1000:
+                            mse_th_step3 = mse_tmp
+                    else:
+                        right = mid
+
+                left -= 1
+                keep_int8 = dict(list(layer_mse_sorted.items())[left:])
+                cfg = quant_utils.QuantConfig('int', {'n_bits': 8}, None)
+                for name in keep_int8.keys():
+                    qlayers[name].step_flag = -1 # keep as int8
+                    qlayers[name].set_quant_config(cfg)
+                to_BFP8 = dict(list(layer_mse_sorted.items())[:left])
                 mx_specs = set_mx_specs(block_size=16, w_elem_format='int8', a_elem_format='int8')
                 cfg = quant_utils.QuantConfig('mx', mx_specs, None)
                 for name in to_BFP8.keys():
-                    qlayers[name].step_flag = 3 # 3 for replaced BFP8
+                    qlayers[name].step_flag = -3 # 3 for replaced BFP8
                     qlayers[name].set_quant_config(cfg)
-                
-                mse_tmp = evaluate(test_loader=dataset_for_search_format)
-                if mse_tmp < mse_th_step3:
-                    left = mid + 1
-                    if mse_th_step3 == 1000:
-                        mse_th_step3 = mse_tmp
-                else:
-                    right = mid
-
-            left -= 1
-            keep_int8 = dict(list(layer_mse_sorted.items())[left:])
-            cfg = quant_utils.QuantConfig('int', {'n_bits': 8}, None)
-            for name in keep_int8.keys():
-                qlayers[name].step_flag = -1 # keep as int8
-                qlayers[name].set_quant_config(cfg)
-            to_BFP8 = dict(list(layer_mse_sorted.items())[:left])
-            mx_specs = set_mx_specs(block_size=16, w_elem_format='int8', a_elem_format='int8')
-            cfg = quant_utils.QuantConfig('mx', mx_specs, None)
-            for name in to_BFP8.keys():
-                qlayers[name].step_flag = -3 # 3 for replaced BFP8
-                qlayers[name].set_quant_config(cfg)
             
-            # loggings = f'step3: left INT8 to BFP8, mse_th = {mse_th_step3}'
-            # mse_BFP8 = evaluate(log_en=True, print_en=False)
-            # print(f'mse_BFP8: {mse_BFP8:.8f}')
-            # with open(f'logs/{args.model_id}/step3.txt', 'w') as f:
-            #     f.write(f'>>> Step3 Model <<< left INT8 to BFP8\n')
-            #     f.write(str(model) + '\n\n')
+                export_quant_config(f'logs/{args.model_id}/quant_cfg.json')
+                # loggings = f'step3: left INT8 to BFP8, mse_th = {0}'
+                # mse_BFP8 = evaluate(log_en=True, print_en=False)
+                # print(f'mse_BFP8: {mse_BFP8:.8f}')
+                # with open(f'logs/{args.model_id}/step3.txt', 'w') as f:
+                #     f.write(f'>>> Step3 Model <<< left INT8 to BFP8\n')
+                #     f.write(str(model) + '\n\n')
 
             print('----------Step4: enable smooth---------------')
-            num_samples = 8
+            num_samples = 1
             from mysmoothquant.smooth import smooth_lm
             smooth_factors = defaultdict(list)
             act_scales = torch.load(f'act_scales/{args.model_id}.pt')
             alphas = [i / 10 for i in range(1, 5)]
+            alphas = [i / 10 for i in np.arange(1, 5, 0.5)]
             for alpha in alphas:
                 smooth_lm(model, act_scales, alpha, smooth_factors)
 
@@ -457,8 +493,8 @@ if __name__ == '__main__':
                     key = name
                 qlayers[name].smooth_factors = smooth_factors[key]
 
-            data_set, _ = get_data(flag='test', args=args) # default batch_size for smooth search
             # args.batch_size = 128
+            data_set, _ = get_data(flag='test', args=args) # default batch_size for smooth search
             indices = np.random.choice(len(data_set), num_samples*args.batch_size, replace=False)
             for indice in indices:
                 # 创建一个Subset对象，这样你就只会从数据集里得到这100个样本

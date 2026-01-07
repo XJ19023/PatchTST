@@ -29,7 +29,7 @@ class QuantWrapper(torch.nn.Module):
         self.smooth_factors = None
         self.smooth_factor = None
         self.loss_func = mse # to select quant data format
-        self.smooth_loss_func = mse # to select smooth en
+        self.smooth_loss_func = kl_divergence # to select smooth en
         self.n_samples = None
         self.step_flag = None
         self.y_mse_quant_mean = 0 # calculate once, use for quant order
@@ -39,6 +39,16 @@ class QuantWrapper(torch.nn.Module):
         self.using_BFP4 = False
         self.store_fp32 = True
         self.y_fp32 = None
+
+        self.quant_cfg = {'quant_meth': None, 'quant_bits': None, 'step_flag': None}
+
+    def save_quant_cfg(self):
+        self.quant_cfg['quant_meth'] = self.cfg.quant_meth
+        if self.cfg.quant_meth == 'int':
+            self.quant_cfg['quant_bits'] = self.cfg.quant_specs['n_bits']
+        if self.cfg.quant_meth == 'mx':
+            self.quant_cfg['quant_bits'] = int(self.cfg.quant_specs['w_elem_format'][-1])
+        self.quant_cfg['step_flag'] = self.step_flag
 
     def set_quant_config(self, cfg: QuantConfig):
         self.cfg = replace(cfg)
