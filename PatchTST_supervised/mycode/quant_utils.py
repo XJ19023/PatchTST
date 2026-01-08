@@ -4,6 +4,8 @@ from dataclasses import dataclass, replace
 from mx.mx_ops import quantize_mx_op
 from mx.elemwise_ops import quantize_elemwise_op
 
+from mycode.globalVar import append_activation, append_weight
+
 @dataclass
 class QuantConfig:
     quant_meth: str          # int8 / int4 / fp8 / bfp
@@ -29,7 +31,7 @@ class QuantWrapper(torch.nn.Module):
         self.smooth_factors = None
         self.smooth_factor = None
         self.loss_func = mse # to select quant data format
-        self.smooth_loss_func = kl_divergence # to select smooth en
+        self.smooth_loss_func = mse # to select smooth en
         self.n_samples = None
         self.step_flag = None
         self.y_mse_quant_mean = 0 # calculate once, use for quant order

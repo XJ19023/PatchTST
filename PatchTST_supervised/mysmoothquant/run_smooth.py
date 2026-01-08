@@ -73,9 +73,9 @@ def select_best_index(vec, th):
 
     best_idx = torch.argmin(mean_vals_masked).item()
     if best_idx is not None:
-        print(f'{A[best_idx]:.6f}, {(best_idx + 1) / 10}, {a-A[best_idx]:.6f}, {a/A[best_idx]:.6f}')
-        print(f'{B[best_idx]:.6f}, {(best_idx + 1) / 10}, {b-B[best_idx]:.6f}, {b/B[best_idx]:.6f}')
-        print(f'{C[best_idx]:.6f}, {(best_idx + 1) / 10}, {c-C[best_idx]:.6f}, {c/C[best_idx]:.6f}')
+        # print(f'{A[best_idx]:.6f}, {(best_idx + 1) / 10}, {a-A[best_idx]:.6f}, {a/A[best_idx]:.6f}')
+        # print(f'{B[best_idx]:.6f}, {(best_idx + 1) / 10}, {b-B[best_idx]:.6f}, {b/B[best_idx]:.6f}')
+        # print(f'{C[best_idx]:.6f}, {(best_idx + 1) / 10}, {c-C[best_idx]:.6f}, {c/C[best_idx]:.6f}')
         if a/A[best_idx] < 1.01 or b/B[best_idx] < 1.01 or c/C[best_idx] < 1.01: 
             best_idx = None
     return best_idx
@@ -193,6 +193,7 @@ if __name__ == '__main__':
     parser.add_argument('--org', action='store_true', default=False, help='registe hooks')
     parser.add_argument('--separate', action='store_true', default=False, help='registe hooks')
     parser.add_argument('--search', action='store_true', default=False, help='registe hooks')
+    parser.add_argument('--load_cfg', action='store_true', default=False, help='registe hooks')
     parser.add_argument(
     '--smooth_module',
     type=str,
@@ -331,15 +332,14 @@ if __name__ == '__main__':
                 evaluate(log_en=True)
 
         if args.search:
-            load_cfg = True
-            if load_cfg:
+            if args.load_cfg:
                 load_quant_config(f'logs/{args.model_id}/quant_cfg.json')
-                loggings = f'step3: left INT8 to BFP8, load cfg'
-                mse_BFP8 = evaluate(log_en=True, print_en=False)
-                print(f'mse_BFP8: {mse_BFP8:.8f}')
-                with open(f'logs/{args.model_id}/load.txt', 'w') as f:
-                    f.write(f'>>> Step3 Model <<< left INT8 to BFP8\n')
-                    f.write(str(model) + '\n\n')
+                # loggings = f'step3: left INT8 to BFP8, load cfg'
+                # mse_BFP8 = evaluate(log_en=True, print_en=False)
+                # print(f'mse_BFP8: {mse_BFP8:.8f}')
+                # with open(f'logs/{args.model_id}/load.txt', 'w') as f:
+                #     f.write(f'>>> Step3 Model <<< left INT8 to BFP8\n')
+                #     f.write(str(model) + '\n\n')
             else:  
                 mse_th_step2, mse_th_step3 = 1000, 1000
                 print('----------Step1: calculate baseline---------------')
@@ -408,13 +408,13 @@ if __name__ == '__main__':
                     else:
                         qlayers[name].set_quant_config(cfg_int) # deliver mx_specs
                 
-                # loggings = f'step2: INT8 to 4 bits, mse_th = {mse_th_step2}'
-                # mse_4bits = evaluate(log_en=True, print_en=False)
-                # print(f'mse_4bits: {mse_4bits:.8f}')
+                loggings = f'step2: INT8 to 4 bits, mse_th = {mse_th_step2}'
+                mse_4bits = evaluate(log_en=True, print_en=False)
+                print(f'mse_4bits: {mse_4bits:.8f}')
 
-                # with open(f'logs/{args.model_id}/step2.txt', 'w') as f:
-                #     f.write(f'>>> Step2 Model <<< INT8 to 4 bits\n')
-                #     f.write(str(model) + '\n\n')
+                with open(f'logs/{args.model_id}/step2.txt', 'w') as f:
+                    f.write(f'>>> Step2 Model <<< INT8 to 4 bits\n')
+                    f.write(str(model) + '\n\n')
 
                 print('----------Step3: left int8 layers to BFP8---------------')
                 layer_mse = {}
@@ -464,12 +464,12 @@ if __name__ == '__main__':
                     qlayers[name].set_quant_config(cfg)
             
                 export_quant_config(f'logs/{args.model_id}/quant_cfg.json')
-                # loggings = f'step3: left INT8 to BFP8, mse_th = {0}'
-                # mse_BFP8 = evaluate(log_en=True, print_en=False)
-                # print(f'mse_BFP8: {mse_BFP8:.8f}')
-                # with open(f'logs/{args.model_id}/step3.txt', 'w') as f:
-                #     f.write(f'>>> Step3 Model <<< left INT8 to BFP8\n')
-                #     f.write(str(model) + '\n\n')
+                loggings = f'step3: left INT8 to BFP8, mse_th = {0}'
+                mse_BFP8 = evaluate(log_en=True, print_en=False)
+                print(f'mse_BFP8: {mse_BFP8:.8f}')
+                with open(f'logs/{args.model_id}/step3.txt', 'w') as f:
+                    f.write(f'>>> Step3 Model <<< left INT8 to BFP8\n')
+                    f.write(str(model) + '\n\n')
 
             print('----------Step4: enable smooth---------------')
             num_samples = 1
@@ -477,7 +477,7 @@ if __name__ == '__main__':
             smooth_factors = defaultdict(list)
             act_scales = torch.load(f'act_scales/{args.model_id}.pt')
             alphas = [i / 10 for i in range(1, 5)]
-            alphas = [i / 10 for i in np.arange(1, 5, 0.5)]
+            # alphas = [i / 10 for i in np.arange(1, 5, 0.5)]
             for alpha in alphas:
                 smooth_lm(model, act_scales, alpha, smooth_factors)
 
@@ -524,10 +524,9 @@ if __name__ == '__main__':
                     quant_kl = qlayers[name].y_kl_quant_mean
                     smoothquant_kl = qlayers[name].y_kl_smoothquant_mean
                     min_idx, min_val = min(enumerate(smoothquant_kl), key=lambda x: x[1])
-                    # print(f'{quant_mse:.8f}, {min_val:.8f}, {min_val < quant_mse}')
                     if min_val < quant_kl:
-                        print(f'\n{quant_kl:.6f}, {name}')
-                        print(f'{min_val:.6f}, {(min_idx + 1) / 10}, {quant_kl-min_val:.6f}, {quant_kl/min_val:.6f}')
+                        # print(f'\n{quant_kl:.6f}, {name}')
+                        # print(f'{min_val:.6f}, {(min_idx + 1) / 10}, {quant_kl-min_val:.6f}, {quant_kl/min_val:.6f}')
                         if quant_kl > min_val * 1.01:
                             qlayers[name].smooth_factor = qlayers[name].smooth_factors[min_idx]
                             qlayers[name].cfg.alpha = (min_idx + 1) / 10
