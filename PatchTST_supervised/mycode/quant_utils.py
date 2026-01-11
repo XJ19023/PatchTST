@@ -132,6 +132,8 @@ class QuantWrapper(torch.nn.Module):
             
         elif self.step_flag == 4:
             if self.store_fp32:
+                # append_activation(f'{self.name}_fp32', x)
+                # append_weight(f'{self.name}_fp32', self.weight)
                 y_fp32 = torch.functional.F.linear(x, self.weight, self.bias)
                 torch.save(y_fp32, f'logs/output/{self.name}.pt')
                 self.store_fp32 = False
@@ -139,6 +141,8 @@ class QuantWrapper(torch.nn.Module):
             else:
                 y_fp32 = torch.load(f'logs/output/{self.name}.pt')
                 self.store_fp32 = True
+            
+            # append_activation(f'{self.name}_quant', x)
             self.iters += 1
             x_quant = self.quant_func(x, self.cfg.quant_specs)
             w_quant = self.quant_func(self.weight, self.cfg.quant_specs)

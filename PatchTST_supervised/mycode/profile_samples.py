@@ -45,11 +45,11 @@ act_keys = ['model.backbone.encoder.layers.0.self_attn.W_Q',
 'model.backbone.encoder.layers.2.ff.3',]
 
 keys = act_keys
-safetensors_path = f"/cephfs/juxin/PatchTST/PatchTST_supervised/logs/ETTh1_336_96/fp32_tensor/case1/activation.safetensors"
+safetensors_path = f"logs/weather_336_336/fp32_tensor/case1/activation.safetensors"
 state_dict_case1 = load_file(safetensors_path)
-safetensors_path = f"/cephfs/juxin/PatchTST/PatchTST_supervised/logs/ETTh1_336_96/fp32_tensor/case2/activation.safetensors"
+safetensors_path = f"logs/weather_336_336/fp32_tensor/case2/activation.safetensors"
 state_dict_case2 = load_file(safetensors_path)
-safetensors_path = f"/cephfs/juxin/PatchTST/PatchTST_supervised/logs/ETTh1_336_96/fp32_tensor/case3/activation.safetensors"
+safetensors_path = f"logs/weather_336_336/fp32_tensor/case3/activation.safetensors"
 state_dict_case3 = load_file(safetensors_path)
 
 
@@ -58,8 +58,6 @@ for k in keys:
     data_case1 = state_dict_case1[k].reshape(-1, state_dict_case1[k].shape[-1])
     data_case2 = state_dict_case2[k].reshape(-1, state_dict_case2[k].shape[-1])
     data_case3 = state_dict_case3[k].reshape(-1, state_dict_case3[k].shape[-1])
-    print(data_case1.shape)
-    exit()
     # mse = loss(data_fp32, data_quant)
 
     colors = [(70/255, 120/255, 142/255), (120/255, 183/255, 201/255), (187/255, 151/255, 39/255), (50/255, 184/255, 151/255), (199/255, 109/255, 162/255), (70/255, 120/255, 142/255)]
@@ -150,7 +148,7 @@ for k in keys:
 
     plt.tight_layout()
 
-    dir_path = f'/cephfs/juxin/PatchTST/PatchTST_supervised/logs/ETTh1_336_96/fig_case'
+    dir_path = f'logs/weather_336_336/fig_case'
     os.makedirs(dir_path, exist_ok=True)
     plt.savefig(f'{dir_path}/{k[23:]}.png')
     plt.close()

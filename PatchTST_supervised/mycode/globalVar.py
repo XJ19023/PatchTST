@@ -12,28 +12,31 @@ def get_counter():
 smooth_factor = {}
 def append_smooth_factor(k, v):
     global smooth_factor
-    smooth_factor[f'{k}'] = v.detach().cpu()
+    smooth_factor[f'{k}'] = v.detach()
 def get_smooth_factor():
     global smooth_factor
     return smooth_factor
 activations_save = {}
 weights_save = {}
+def reset_activation():
+    global activations_save
+    activations_save = {}
 def append_activation(k, v):
     global activations_save
-    activations_save[f'{k}'] = v.detach().cpu()
+    activations_save[f'{k}'] = v.detach()
 def append_weight(k, v):
     global weights_save
-    weights_save[f'{k}'] = v.detach().cpu()
+    weights_save[f'{k}'] = v.detach()
 def save_tensors(dir=None):
     global activations_save
     global weights_save
-    activations_save = {k: v.contiguous().clone().cpu() for k, v in activations_save.items()}
+    activations_save = {k: v.contiguous().clone() for k, v in activations_save.items()}
     with open(f'{dir}/activation_key.py', 'w') as f:
         f.writelines(f"act_keys = [")
         for k in activations_save.keys():
             f.writelines(f"'{k}',\n")
         f.writelines(f"]")
-    weights_save = {k: v.clone().cpu() for k, v in weights_save.items()}
+    weights_save = {k: v.clone() for k, v in weights_save.items()}
     with open(f'{dir}/weight_key.py', 'w') as f:
         f.writelines(f"wgt_keys = [")
         for k in weights_save.keys():

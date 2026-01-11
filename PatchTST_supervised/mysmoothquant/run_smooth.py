@@ -21,7 +21,7 @@ import numpy as np
 from mysmoothquant.fake_quant import W8A8Linear, quantize_model
 from mx import mxLinear
 from mx.quant_mx_specs import set_mx_specs
-from mycode.globalVar import save_tensors, increas_counter, get_counter, append_activation, save_tensors
+from mycode.globalVar import save_tensors, increas_counter, get_counter, append_activation, save_tensors, reset_activation
 import transformers.models.llama.modeling_llama
 import mycode.quant_utils as quant_utils
 from collections import defaultdict
@@ -190,6 +190,7 @@ if __name__ == '__main__':
     parser.add_argument('--alpha', type=float, default=0.5, help='test samples, 0 means full samples')
     parser.add_argument('--quant', action='store_true', default=False, help='registe hooks')
     parser.add_argument('--n_bits', type=int, default=8, help='test samples, 0 means full samples')
+    parser.add_argument('--smooth_n_samples', type=int, default=1, help='test samples, 0 means full samples')
     parser.add_argument('--org', action='store_true', default=False, help='registe hooks')
     parser.add_argument('--separate', action='store_true', default=False, help='registe hooks')
     parser.add_argument('--search', action='store_true', default=False, help='registe hooks')
@@ -233,8 +234,13 @@ if __name__ == '__main__':
         if isinstance(x, tuple):
             x = x[0]
         if name == 'model.backbone.encoder.layers.0.self_attn.W_Q':
+            if get_counter() != 0:
+                dir_path = f'logs/{args.model_id}/fp32_tensor/case{get_counter()}'
+                os.makedirs(dir_path, exist_ok=True)
+                save_tensors(dir=dir_path)
+                reset_activation()
             increas_counter()
-        append_activation(f'case{get_counter()}_{name}', x)
+        append_activation(name, x)
         # print(f'case{get_counter()}_{name}', x.shape, module.weight.shape)
         # with open(f'process_flow.txt', 'a') as f:
         #     f.write(f"{name} {m}\n")
@@ -245,6 +251,7 @@ if __name__ == '__main__':
 
     import os
     os.makedirs(f'logs/{args.model_id}', exist_ok=True)
+    os.makedirs(f'logs/output', exist_ok=True)
     with open(f'logs/{args.model_id}/orginal_model.txt', 'w') as f:
         f.write(f'>>> Original Model <<<\n')
         f.write(str(model) + '\n\n')
@@ -274,8 +281,8 @@ if __name__ == '__main__':
 
     # args.batch_size = 128
     data_set, _ = get_data(flag='test', args=args) # default batch_size for smooth search
-    cal_mse_samples = 32
-    num_samples = min(cal_mse_samples * args.batch_size, len(data_set))
+    cal_mse_samples = min(32, len(data_set)//args.batch_size)
+    num_samples = cal_mse_samples * args.batch_size
     indices = np.random.choice(len(data_set), num_samples, replace=False)
     # 创建一个Subset对象，这样你就只会从数据集里得到这100个样本
     subset = Subset(data_set, indices)
@@ -289,8 +296,18 @@ if __name__ == '__main__':
 
 
     if args.org:
+
+        if args.hook:
+            hooks = []
+            for name, module in model.named_modules():
+                if isinstance(module, torch.nn.Linear) and 'head' not in name and 'W_P' not in name:
+                    hooks.append(
+                        module.register_forward_hook(functools.partial(stat_input_hook, name=name))
+                    )
+
         loggings = f'org'
-        evaluate(log_en=True)
+        evaluate(log_en=True, n_samples=args.n_samples)
+
         
 
     if args.quant:
@@ -314,13 +331,6 @@ if __name__ == '__main__':
                 for name in qlayers:
                     qlayers[name].set_quant_config(cfg)
 
-                if args.hook:
-                    hooks = []
-                    for name, module in model.named_modules():
-                        if isinstance(module, torch.nn.Linear) and 'head' not in name and 'W_P' not in name:
-                            hooks.append(
-                                module.register_forward_hook(functools.partial(stat_input_hook, name=name))
-                            )
                 if idx == 0:
                     loggings = f'int8'
                 if idx == 1:
@@ -496,9 +506,10 @@ if __name__ == '__main__':
             # args.batch_size = 128
             data_set, _ = get_data(flag='test', args=args) # default batch_size for smooth search
             indices = np.random.choice(len(data_set), num_samples*args.batch_size, replace=False)
+            indices = torch.tensor(indices).reshape(num_samples, args.batch_size)
             for indice in indices:
                 # 创建一个Subset对象，这样你就只会从数据集里得到这100个样本
-                subset = Subset(data_set, [indice])
+                subset = Subset(data_set, indice)
                 # 使用这个Subset创建一个新的DataLoader
                 dataset_for_enable_smooth = DataLoader(subset, batch_size=args.batch_size, shuffle=False)
 
@@ -542,8 +553,11 @@ if __name__ == '__main__':
             print('----------final quantized model---------------')
             print("Peak allocated:", torch.cuda.max_memory_allocated() / 1024**3, "GB")
 
+            with open('logs/123.log', 'a') as f:
+                f.write(f'{args.model_id}\n')
+
 
         
-        
-
-    # save_tensors(dir=f'save_tensors/org')
+    # dir_path = f'logs/{args.model_id}/fp32_tensor'
+    # os.makedirs(dir_path, exist_ok=True)
+    # save_tensors(dir=dir_path)

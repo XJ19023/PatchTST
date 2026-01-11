@@ -475,3 +475,4 @@ $RECYCLE.BIN/
 **/result.txt
 **/**.pt
 **/model_structure.txt
+PatchTST_supervised/checkpoints
