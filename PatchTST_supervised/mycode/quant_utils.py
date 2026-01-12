@@ -41,6 +41,8 @@ class QuantWrapper(torch.nn.Module):
         self.using_BFP4 = False
         self.store_fp32 = True
         self.y_fp32 = None
+        self.powersmooth = True
+
 
         self.quant_cfg = {'quant_meth': None, 'quant_bits': None, 'step_flag': None}
 
@@ -152,15 +154,38 @@ class QuantWrapper(torch.nn.Module):
             if self.iters == self.n_samples: 
                 self.y_kl_quant_mean /= self.n_samples
 
+            x_kl_quant = self.smooth_loss_func(x, x_quant)
+            w_kl_quant = self.smooth_loss_func(self.weight, w_quant)
             for alpha_idx, smooth_factor in enumerate(self.smooth_factors):
                 smooth_factor =  smooth_factor.view(1, -1).to(device=x.device)
-                x_smooth = x.div(smooth_factor)
-                w_smooth = self.weight.mul(smooth_factor)
-                x_smoothquant = self.quant_func(x_smooth, self.cfg.quant_specs)
-                w_smoothquant = self.quant_func(w_smooth, self.cfg.quant_specs)
-                y_smoothquant = torch.functional.F.linear(x_smoothquant, w_smoothquant, self.bias)
 
-                y_kl_smoothquant = self.smooth_loss_func(y_fp32, y_smoothquant)
+                if self.powersmooth:
+                    power = torch.log2(smooth_factor + 1e-6).int()
+                    residual = smooth_factor / (2.0 ** power)
+                    x_smooth = x.div(smooth_factor)
+                    w_smooth = self.weight.mul(residual)
+                    x_smoothquant = self.quant_func(x_smooth, self.cfg.quant_specs)
+                    w_smoothquant = self.quant_func(w_smooth, self.cfg.quant_specs)
+                    y_smoothquant = torch.functional.F.linear(x_smoothquant * 2 ** power, w_smoothquant, self.bias)
+
+                    y_kl_smoothquant = self.smooth_loss_func(y_fp32, y_smoothquant)
+
+                    # x_kl_smoothquant = self.smooth_loss_func(x_smooth, x_smoothquant)
+                    # w_kl_smoothquant = self.smooth_loss_func(w_smooth, w_smoothquant)
+                    # print(f'power: {self.name[23:]:<27}, ({x_kl_quant:.8f}, {x_kl_smoothquant:.8f}), ({w_kl_quant:.8f}, {w_kl_smoothquant:.8f}), ({y_kl_quant:.8f}, {y_kl_smoothquant:.8f}), {(alpha_idx+1)/10}, {y_kl_quant > y_kl_smoothquant}, {power.min().item()}, {power.max().item()}') 
+                else:
+                    x_smooth = x.div(smooth_factor)
+                    w_smooth = self.weight.mul(smooth_factor)
+                    x_smoothquant = self.quant_func(x_smooth, self.cfg.quant_specs)
+                    w_smoothquant = self.quant_func(w_smooth, self.cfg.quant_specs)
+                    y_smoothquant = torch.functional.F.linear(x_smoothquant, w_smoothquant, self.bias)
+
+                    y_kl_smoothquant = self.smooth_loss_func(y_fp32, y_smoothquant)
+
+                    # x_kl_smoothquant = self.smooth_loss_func(x_smooth, x_smoothquant)
+                    # w_kl_smoothquant = self.smooth_loss_func(w_smooth, w_smoothquant)
+                    # print(f'>>>>>: {self.name[23:]:<27}, ({x_kl_quant:.8f}, {x_kl_smoothquant:.8f}), ({w_kl_quant:.8f}, {w_kl_smoothquant:.8f}), ({y_kl_quant:.8f}, {y_kl_smoothquant:.8f}), {(alpha_idx+1)/10}, {y_kl_quant > y_kl_smoothquant}, {smooth_factor.min().item()}, {smooth_factor.max().item()}') 
+
 
                 self.y_kl_smoothquant_mean[alpha_idx] += y_kl_smoothquant
                 if self.iters == self.n_samples: 
@@ -181,18 +206,33 @@ class QuantWrapper(torch.nn.Module):
         #     return torch.zeros_like(x[..., :self.weight.size(0)])
 
         else:
-            x_smooth = x_quant = None
-            w_smooth = w_quant = None
-            if self.smooth_factor is not None:
-                smooth_factor =  self.smooth_factor.view(1, -1).to(device=x.device)
-                x_smooth = x.div(smooth_factor)
-                w_smooth = self.weight.mul(smooth_factor)
+            if self.powersmooth:
+                x_smooth = x_quant = None
+                w_smooth = w_quant = None
+                power = 0
+                if self.smooth_factor is not None:
+                    smooth_factor =  self.smooth_factor.view(1, -1).to(device=x.device)
+                    power = torch.log2(smooth_factor + 1e-6).int()
+                    residual = smooth_factor / (2.0 ** power)
+                    x_smooth = x.div(smooth_factor)
+                    w_smooth = self.weight.mul(residual)
 
-            x_quant = self.quant_func(x_smooth if x_smooth is not None else x, self.cfg.quant_specs)
-            w_quant = self.quant_func(w_smooth if w_smooth is not None else self.weight, self.cfg.quant_specs)
+                x_quant = self.quant_func(x_smooth if x_smooth is not None else x, self.cfg.quant_specs)
+                w_quant = self.quant_func(w_smooth if w_smooth is not None else self.weight, self.cfg.quant_specs)
 
-            y = torch.functional.F.linear(x_quant if x_quant is not None else x, \
-                                          w_quant if w_quant is not None else self.weight, self.bias)
+                y = torch.functional.F.linear(x_quant * (2.0 ** power), w_quant, self.bias)
+            else:
+                x_smooth = x_quant = None
+                w_smooth = w_quant = None
+                if self.smooth_factor is not None:
+                    smooth_factor =  self.smooth_factor.view(1, -1).to(device=x.device)
+                    x_smooth = x.div(smooth_factor)
+                    w_smooth = self.weight.mul(smooth_factor)
+
+                x_quant = self.quant_func(x_smooth if x_smooth is not None else x, self.cfg.quant_specs)
+                w_quant = self.quant_func(w_smooth if w_smooth is not None else self.weight, self.cfg.quant_specs)
+
+                y = torch.functional.F.linear(x_quant, w_quant, self.bias)
             return y
         
 

@@ -552,21 +552,18 @@ if __name__ == '__main__':
                     qlayers[name].smooth_factor = None
                     qlayers[name].cfg.alpha = None
 
-            # loggings = f'step4: enable smooth, smooth_samples={num_samples} \n'
-            # mse_smooth = evaluate(log_en=True, print_en=False)
-            # print(f'mse_smooth: {mse_smooth:.8f}')
-            # with open(f'logs/{args.model_id}/step4.txt', 'w') as f:
-            #     f.write(f'>>> Step4 Model <<< enable smooth\n')
-            #     f.write(str(model) + '\n\n')
+            loggings = f'step4: enable smooth, smooth_samples={num_samples} \n'
+            mse_smooth = evaluate(log_en=True, print_en=False)
+            print(f'mse_smooth: {mse_smooth:.8f}')
+            with open(f'logs/{args.model_id}/step4.txt', 'w') as f:
+                f.write(f'>>> Step4 Model <<< enable smooth\n')
+                f.write(str(model) + '\n\n')
 
-            # print('----------final quantized model---------------')
-            # print("Peak allocated:", torch.cuda.max_memory_allocated() / 1024**3, "GB")
+            print('----------final quantized model---------------')
+            print("Peak allocated:", torch.cuda.max_memory_allocated() / 1024**3, "GB")
 
-            # with open('logs/123.log', 'a') as f:
-            #     f.write(f'{args.model_id}\n')
-            if mse_with_smooth > mse_without_smooth:
-                with open('logs/123.log', 'a') as f:
-                    f.write(f'{args.model_id}\n')
+            with open('logs/123.log', 'a') as f:
+                f.write(f'{args.model_id}\n')
 
 
         
