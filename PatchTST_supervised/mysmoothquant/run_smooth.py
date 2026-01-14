@@ -90,7 +90,7 @@ def evaluate(n_samples=None, test_loader=None, log_en=False, print_en=True):
     if log_en:
         with open(f"logs/{args.model_id}/result.txt", 'a') as f:
             f.write(f"mse:{mse:.8f}, {loggings}")
-            f.write('\n')
+            # f.write('\n')
     return mse
 
 if __name__ == '__main__':
@@ -195,18 +195,8 @@ if __name__ == '__main__':
     parser.add_argument('--separate', action='store_true', default=False, help='registe hooks')
     parser.add_argument('--search', action='store_true', default=False, help='registe hooks')
     parser.add_argument('--load_cfg', action='store_true', default=False, help='registe hooks')
-    parser.add_argument(
-    '--smooth_module',
-    type=str,
-    default='qkv',
-    help='Modules to apply smooth'
-)
-#     parser.add_argument(
-#     '--smooth_module',
-#     nargs='+',
-#     default=['qkv', 'to_out', 'ff.0', 'ff.3'],
-#     help='Modules to apply smooth'
-# )
+    parser.add_argument('--powersmooth', action='store_true', default=False, help='registe hooks')
+
     args = parser.parse_args()
     torch.cuda.reset_peak_memory_stats()
 
@@ -339,7 +329,7 @@ if __name__ == '__main__':
                     loggings = f'BFP8'
                 if idx == 3:
                     loggings = f'BFP4'
-                evaluate(log_en=True)
+                evaluate(log_en=True, n_samples=args.n_samples)
 
         if args.search:
             if args.load_cfg:
@@ -350,8 +340,6 @@ if __name__ == '__main__':
                 # with open(f'logs/{args.model_id}/load.txt', 'w') as f:
                 #     f.write(f'>>> Step3 Model <<< left INT8 to BFP8\n')
                 #     f.write(str(model) + '\n\n')
-                mse_without_smooth = evaluate(log_en=False, print_en=False, n_samples=4)
-                print(f'mse_without_smooth: {mse_without_smooth:.8f}')
             else:  
                 mse_th_step2, mse_th_step3 = 1000, 1000
                 print('----------Step1: calculate baseline---------------')
@@ -483,6 +471,8 @@ if __name__ == '__main__':
                     f.write(f'>>> Step3 Model <<< left INT8 to BFP8\n')
                     f.write(str(model) + '\n\n')
 
+            mse_without_smooth = evaluate(log_en=False, print_en=False, n_samples=4)
+
             print('----------Step4: enable smooth---------------')
             num_samples = 1
             from mysmoothquant.smooth import smooth_lm
@@ -497,6 +487,7 @@ if __name__ == '__main__':
                 qlayers[name].y_kl_smoothquant_mean = [0 for _ in alphas]
                 qlayers[name].n_samples = num_samples
                 qlayers[name].step_flag = 4  # search smooth
+                qlayers[name].powersmooth = args.powersmooth
 
                 key = None
                 if name.endswith(('W_Q', 'W_K', 'W_V')):
@@ -545,14 +536,14 @@ if __name__ == '__main__':
                             qlayers[name].cfg.alpha = (min_idx + 1) / 10
 
             mse_with_smooth = evaluate(log_en=False, print_en=False, n_samples=4)
-            print(f'mse_with_smooth: {mse_with_smooth:.8f}')
-            if mse_with_smooth > mse_without_smooth:
-                print('Smoothquant not enabled due to worse performance than threshold.')
-                for name in qlayers:
-                    qlayers[name].smooth_factor = None
-                    qlayers[name].cfg.alpha = None
+            print(f'mse_with_smooth   : {mse_with_smooth:.8f}')
+            print(f'mse_without_smooth: {mse_without_smooth:.8f}')
+            if mse_with_smooth >= mse_without_smooth:
+                smooth_log = 'smooth disable\n'
+            else:
+                smooth_log = 'smooth enable \n'
 
-            loggings = f'step4: enable smooth, smooth_samples={num_samples} \n'
+            loggings = f"step4: enable smooth, smooth_mode={'powersmooth' if args.powersmooth else 'smoothquant'}, smooth_judge={smooth_log}"
             mse_smooth = evaluate(log_en=True, print_en=False)
             print(f'mse_smooth: {mse_smooth:.8f}')
             with open(f'logs/{args.model_id}/step4.txt', 'w') as f:

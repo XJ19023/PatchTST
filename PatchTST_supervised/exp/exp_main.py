@@ -216,8 +216,9 @@ class Exp_Main(Exp_Basic):
 
         return self.model
 
-    def test(self, setting=None, test=0, n_samples=None, get_max_samples=False, test_loader=None):
-        # test_data, test_loader = self._get_data(flag='test')
+    def test(self, setting=None, test=0, n_samples=None, get_smooth_scale=False, test_loader=None):
+        if get_smooth_scale:
+            test_data, test_loader = self._get_data(flag='test')
         # if get_max_samples:
         #     return len(test_loader)
         
