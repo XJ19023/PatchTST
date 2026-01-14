@@ -467,7 +467,7 @@ $RECYCLE.BIN/
 
 
 **/checkpoints/**
-**/logs**/**
+**/logs-old/**
 **/results/**
 **/save_tensors/**
 **/test_results/**
