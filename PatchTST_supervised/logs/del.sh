@@ -9,7 +9,7 @@ find . -type f -name "result.txt" | while read -r file; do
     fi
 
     # 计算要删除的行号：倒数第二行
-    delete_line=$((total_lines - 1))
+    delete_line=$((total_lines))
 
     # 使用 sed 原地删除
     sed -i "${delete_line}d" "$file"

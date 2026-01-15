@@ -183,8 +183,8 @@ class QuantWrapper(torch.nn.Module):
             result = gp_minimize(
                 func=objective,
                 dimensions=search_space,
-                n_calls=40,
-                n_initial_points=5,
+                n_calls=50,
+                n_initial_points=10,
                 random_state=42,
                 verbose=False
             )
