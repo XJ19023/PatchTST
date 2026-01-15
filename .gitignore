@@ -472,7 +472,6 @@ $RECYCLE.BIN/
 **/save_tensors/**
 **/test_results/**
 **/dataset/**
-**/result.txt
 **/**.pt
 **/model_structure.txt
 PatchTST_supervised/checkpoints

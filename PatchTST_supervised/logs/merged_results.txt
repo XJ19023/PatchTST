@@ -9,6 +9,7 @@ mse:0.15267502, step2: INT8 to 4 bits, mse_th = 0.1503860354423523
 mse:0.15220807, step3: left INT8 to BFP8, mse_th = 0
 mse:0.15192261, step4: enable smooth, smooth_mode=smoothquant, smooth_judge=smooth enable
 mse:0.15215522, step4: enable smooth, smooth_mode=powersmooth, smooth_judge=smooth enable 
+mse:0.15164845, step4: enable smooth, smooth_mode=smoothquant, smooth_judge=smooth enable 
 
 ========== logs/weather_336_192/result.txt ==========
 mse:0.19650176, org
@@ -20,6 +21,7 @@ mse:0.19735381, step2: INT8 to 4 bits, mse_th = 0.19572655856609344
 mse:0.19690397, step3: left INT8 to BFP8, mse_th = 0
 mse:0.19644968, step4: enable smooth, smooth_mode=smoothquant, smooth_judge=smooth enable
 mse:0.19686854, step4: enable smooth, smooth_mode=powersmooth, smooth_judge=smooth disable
+mse:0.19706218, step4: enable smooth, smooth_mode=smoothquant, smooth_judge=smooth enable 
 
 ========== logs/weather_336_336/result.txt ==========
 mse:0.24824320, org
@@ -31,6 +33,7 @@ mse:0.24848898, step2: INT8 to 4 bits, mse_th = 0.25035080313682556
 mse:0.24825051, step3: left INT8 to BFP8, mse_th = 0
 mse:0.24807955, step4: enable smooth, smooth_mode=smoothquant, smooth_judge=smooth enable
 mse:0.24819687, step4: enable smooth, smooth_mode=powersmooth, smooth_judge=smooth enable 
+mse:0.24820895, step4: enable smooth, smooth_mode=smoothquant, smooth_judge=smooth disable
 
 ========== logs/weather_336_720/result.txt ==========
 mse:0.31948894, org
@@ -42,6 +45,7 @@ mse:0.31942719, step2: INT8 to 4 bits, mse_th = 0.32000434398651123
 mse:0.31938955, step3: left INT8 to BFP8, mse_th = 0
 mse:0.31931806, step4: enable smooth, smooth_mode=smoothquant, smooth_judge=smooth disabled
 mse:0.31940991, step4: enable smooth, smooth_mode=powersmooth, smooth_judge=smooth enable 
+mse:0.31938410, step4: enable smooth, smooth_mode=smoothquant, smooth_judge=smooth enable 
 
 ========== logs/traffic_336_96/result.txt ==========
 mse:0.36685607, org
@@ -53,6 +57,7 @@ mse:0.36685503, step2: INT8 to 4 bits, mse_th = 0.3673688769340515
 mse:0.36685929, step3: left INT8 to BFP8, mse_th = 0
 mse:0.36705279, step4: enable smooth, smooth_mode=smoothquant, smooth_judge=smooth disabled
 mse:0.36685929, step4: enable smooth, smooth_mode=powersmooth, smooth_judge=smooth enable 
+mse:0.36676511, step4: enable smooth, smooth_mode=smoothquant, smooth_judge=smooth disable
 
 ========== logs/traffic_336_192/result.txt ==========
 mse:0.38483953, org
@@ -64,6 +69,7 @@ mse:0.38501093, step2: INT8 to 4 bits, mse_th = 0.38828474283218384
 mse:0.38506886, step3: left INT8 to BFP8, mse_th = 0
 mse:0.38511777, step4: enable smooth, smooth_mode=smoothquant, smooth_judge=smooth disabled
 mse:0.38506886, step4: enable smooth, smooth_mode=powersmooth, smooth_judge=smooth enable 
+mse:0.38497820, step4: enable smooth, smooth_mode=smoothquant, smooth_judge=smooth disable
 
 ========== logs/traffic_336_336/result.txt ==========
 mse:0.39472207, org
@@ -75,6 +81,7 @@ mse:0.39488190, step2: INT8 to 4 bits, mse_th = 0.3974350690841675
 mse:0.39494839, step3: left INT8 to BFP8, mse_th = 0
 mse:0.39559925, step4: enable smooth, smooth_mode=smoothquant, smooth_judge=smooth disabled
 mse:0.39494839, step4: enable smooth, smooth_mode=powersmooth, smooth_judge=smooth enable 
+mse:0.39513752, step4: enable smooth, smooth_mode=smoothquant, smooth_judge=smooth enable 
 
 ========== logs/traffic_336_720/result.txt ==========
 mse:0.45633972, org
@@ -86,6 +93,7 @@ mse:0.45648789, step2: INT8 to 4 bits, mse_th = 0.4580517113208771
 mse:0.45653000, step3: left INT8 to BFP8, mse_th = 0
 mse:0.45657390, step4: enable smooth, smooth_mode=smoothquant, smooth_judge=smooth disabled
 mse:0.45653000, step4: enable smooth, smooth_mode=powersmooth, smooth_judge=smooth enable 
+mse:0.45652291, step4: enable smooth, smooth_mode=smoothquant, smooth_judge=smooth disable
 
 ========== logs/electricity_336_96/result.txt ==========
 mse:0.12994891, org
@@ -97,6 +105,7 @@ mse:0.12999941, step2: INT8 to 4 bits, mse_th = 0.12955321371555328
 mse:0.13003941, step3: left INT8 to BFP8, mse_th = 0
 mse:0.12990458, step4: enable smooth, smooth_mode=smoothquant, smooth_judge=smooth enable
 mse:0.13003941, step4: enable smooth, smooth_mode=powersmooth, smooth_judge=smooth enable 
+mse:0.13011710, step4: enable smooth, smooth_mode=smoothquant, smooth_judge=smooth disable
 
 ========== logs/electricity_336_192/result.txt ==========
 mse:0.14486268, org
@@ -108,6 +117,7 @@ mse:0.14455223, step2: INT8 to 4 bits, mse_th = 0.1489415019750595
 mse:0.14474495, step3: left INT8 to BFP8, mse_th = 0
 mse:0.14473520, step4: enable smooth, smooth_mode=smoothquant, smooth_judge=smooth enable
 mse:0.14474495, step4: enable smooth, smooth_mode=powersmooth, smooth_judge=smooth enable 
+mse:0.14500985, step4: enable smooth, smooth_mode=smoothquant, smooth_judge=smooth disable
 
 ========== logs/electricity_336_336/result.txt ==========
 mse:0.16404609, org
@@ -119,6 +129,7 @@ mse:0.16406275, step2: INT8 to 4 bits, mse_th = 0.16638319194316864
 mse:0.16425602, step3: left INT8 to BFP8, mse_th = 0
 mse:0.16417444, step4: enable smooth, smooth_mode=smoothquant, smooth_judge=smooth enable
 mse:0.16425602, step4: enable smooth, smooth_mode=powersmooth, smooth_judge=smooth enable 
+mse:0.16424061, step4: enable smooth, smooth_mode=smoothquant, smooth_judge=smooth disable
 
 ========== logs/electricity_336_720/result.txt ==========
 mse:0.20872329, org
@@ -130,6 +141,7 @@ mse:0.20867474, step2: INT8 to 4 bits, mse_th = 0.2103799283504486
 mse:0.20867692, step3: left INT8 to BFP8, mse_th = 0
 mse:0.20894070, step4: enable smooth, smooth_mode=smoothquant, smooth_judge=smooth disabled
 mse:0.20867692, step4: enable smooth, smooth_mode=powersmooth, smooth_judge=smooth enable 
+mse:0.20877413, step4: enable smooth, smooth_mode=smoothquant, smooth_judge=smooth disable
 
 ========== logs/ETTh1_336_96/result.txt ==========
 mse:0.37512082, org
@@ -141,6 +153,7 @@ mse:0.37552756, step2: INT8 to 4 bits, mse_th = 0.37968361377716064
 mse:0.37553912, step3: left INT8 to BFP8, mse_th = 0
 mse:0.37557459, step4: enable smooth, smooth_mode=smoothquant, smooth_judge=smooth disabled
 mse:0.37538335, step4: enable smooth, smooth_mode=powersmooth, smooth_judge=smooth enable 
+mse:0.37550110, step4: enable smooth, smooth_mode=smoothquant, smooth_judge=smooth enable 
 
 ========== logs/ETTh1_336_192/result.txt ==========
 mse:0.41366065, org
@@ -152,6 +165,7 @@ mse:0.41378340, step2: INT8 to 4 bits, mse_th = 0.4138506054878235
 mse:0.41384494, step3: left INT8 to BFP8, mse_th = 0
 mse:0.41435882, step4: enable smooth, smooth_mode=smoothquant, smooth_judge=smooth disabled
 mse:0.41378483, step4: enable smooth, smooth_mode=powersmooth, smooth_judge=smooth enable 
+mse:0.41398191, step4: enable smooth, smooth_mode=smoothquant, smooth_judge=smooth disable
 
 ========== logs/ETTh1_336_336/result.txt ==========
 mse:0.43105024, org
@@ -163,6 +177,7 @@ mse:0.43139294, step2: INT8 to 4 bits, mse_th = 0.4417623281478882
 mse:0.43159634, step3: left INT8 to BFP8, mse_th = 0
 mse:0.43116808, step4: enable smooth, smooth_mode=smoothquant, smooth_judge=smooth enable
 mse:0.43170527, step4: enable smooth, smooth_mode=powersmooth, smooth_judge=smooth enable 
+mse:0.43170342, step4: enable smooth, smooth_mode=smoothquant, smooth_judge=smooth disable
 
 ========== logs/ETTh1_336_720/result.txt ==========
 mse:0.44962421, org
@@ -174,6 +189,7 @@ mse:0.44902292, step2: INT8 to 4 bits, mse_th = 0.45580288767814636
 mse:0.44921154, step3: left INT8 to BFP8, mse_th = 0
 mse:0.44992855, step4: enable smooth, smooth_mode=smoothquant, smooth_judge=smooth disabled
 mse:0.44952694, step4: enable smooth, smooth_mode=powersmooth, smooth_judge=smooth disable
+mse:0.44965863, step4: enable smooth, smooth_mode=smoothquant, smooth_judge=smooth disable
 
 ========== logs/ETTh2_336_96/result.txt ==========
 mse:0.27417257, org
@@ -185,6 +201,7 @@ mse:0.27391231, step2: INT8 to 4 bits, mse_th = 0.27408093214035034
 mse:0.27390292, step3: left INT8 to BFP8, mse_th = 0
 mse:0.27390140, step4: enable smooth, smooth_mode=smoothquant, smooth_judge=smooth enable
 mse:0.27392972, step4: enable smooth, smooth_mode=powersmooth, smooth_judge=smooth disable
+mse:0.27397284, step4: enable smooth, smooth_mode=smoothquant, smooth_judge=smooth enable 
 
 ========== logs/ETTh2_336_192/result.txt ==========
 mse:0.33951145, org
@@ -196,6 +213,7 @@ mse:0.33921358, step2: INT8 to 4 bits, mse_th = 0.33938032388687134
 mse:0.33929846, step3: left INT8 to BFP8, mse_th = 0
 mse:0.33943635, step4: enable smooth, smooth_mode=smoothquant, smooth_judge=smooth enable
 mse:0.33952931, step4: enable smooth, smooth_mode=powersmooth, smooth_judge=smooth enable 
+mse:0.33927408, step4: enable smooth, smooth_mode=smoothquant, smooth_judge=smooth enable 
 
 ========== logs/ETTh2_336_336/result.txt ==========
 mse:0.33097801, org
@@ -207,6 +225,7 @@ mse:0.33077160, step2: INT8 to 4 bits, mse_th = 0.36836105585098267
 mse:0.33094600, step3: left INT8 to BFP8, mse_th = 0
 mse:0.33102819, step4: enable smooth, smooth_mode=smoothquant, smooth_judge=smooth enable
 mse:0.33099213, step4: enable smooth, smooth_mode=powersmooth, smooth_judge=smooth disable
+mse:0.33083886, step4: enable smooth, smooth_mode=smoothquant, smooth_judge=smooth enable 
 
 ========== logs/ETTh2_336_720/result.txt ==========
 mse:0.37878257, org
@@ -218,6 +237,7 @@ mse:0.37862045, step2: INT8 to 4 bits, mse_th = 0.39096546173095703
 mse:0.37864408, step3: left INT8 to BFP8, mse_th = 0
 mse:0.37856632, step4: enable smooth, smooth_mode=smoothquant, smooth_judge=smooth enable
 mse:0.37860590, step4: enable smooth, smooth_mode=powersmooth, smooth_judge=smooth enable 
+mse:0.37860048, step4: enable smooth, smooth_mode=smoothquant, smooth_judge=smooth disable
 
 ========== logs/ETTm1_336_96/result.txt ==========
 mse:0.29320222, org
@@ -229,6 +249,7 @@ mse:0.29315934, step2: INT8 to 4 bits, mse_th = 0.2935090661048889
 mse:0.29380742, step3: left INT8 to BFP8, mse_th = 0
 mse:0.29221243, step4: enable smooth, smooth_mode=smoothquant, smooth_judge=smooth enable
 mse:0.29380742, step4: enable smooth, smooth_mode=powersmooth, smooth_judge=smooth enable 
+mse:0.29284757, step4: enable smooth, smooth_mode=smoothquant, smooth_judge=smooth enable 
 
 ========== logs/ETTm1_336_192/result.txt ==========
 mse:0.33090752, org
@@ -240,6 +261,7 @@ mse:0.33069134, step2: INT8 to 4 bits, mse_th = 0.32846617698669434
 mse:0.33138070, step3: left INT8 to BFP8, mse_th = 0
 mse:0.33216280, step4: enable smooth, smooth_mode=smoothquant, smooth_judge=smooth enable
 mse:0.33138070, step4: enable smooth, smooth_mode=powersmooth, smooth_judge=smooth enable 
+mse:0.33158451, step4: enable smooth, smooth_mode=smoothquant, smooth_judge=smooth enable 
 
 ========== logs/ETTm1_336_336/result.txt ==========
 mse:0.36517385, org
@@ -251,6 +273,7 @@ mse:0.36569396, step2: INT8 to 4 bits, mse_th = 0.3646118938922882
 mse:0.36635530, step3: left INT8 to BFP8, mse_th = 0
 mse:0.36574149, step4: enable smooth, smooth_mode=smoothquant, smooth_judge=smooth enable
 mse:0.36634934, step4: enable smooth, smooth_mode=powersmooth, smooth_judge=smooth enable 
+mse:0.36558828, step4: enable smooth, smooth_mode=smoothquant, smooth_judge=smooth enable 
 
 ========== logs/ETTm1_336_720/result.txt ==========
 mse:0.41357020, org
@@ -262,6 +285,7 @@ mse:0.41322649, step2: INT8 to 4 bits, mse_th = 0.41378048062324524
 mse:0.41348276, step3: left INT8 to BFP8, mse_th = 0
 mse:0.41347113, step4: enable smooth, smooth_mode=smoothquant, smooth_judge=smooth enable
 mse:0.41355631, step4: enable smooth, smooth_mode=powersmooth, smooth_judge=smooth enable 
+mse:0.41365886, step4: enable smooth, smooth_mode=smoothquant, smooth_judge=smooth enable 
 
 ========== logs/ETTm2_336_96/result.txt ==========
 mse:0.16422716, org
@@ -273,6 +297,7 @@ mse:0.16411361, step2: INT8 to 4 bits, mse_th = 0.16502325236797333
 mse:0.16422902, step3: left INT8 to BFP8, mse_th = 0
 mse:0.16405356, step4: enable smooth, smooth_mode=smoothquant, smooth_judge=smooth enable
 mse:0.16436280, step4: enable smooth, smooth_mode=powersmooth, smooth_judge=smooth disable
+mse:0.16416159, step4: enable smooth, smooth_mode=smoothquant, smooth_judge=smooth enable 
 
 ========== logs/ETTm2_336_192/result.txt ==========
 mse:0.22142348, org
@@ -284,6 +309,7 @@ mse:0.22138804, step2: INT8 to 4 bits, mse_th = 0.2209833860397339
 mse:0.22149469, step3: left INT8 to BFP8, mse_th = 0
 mse:0.22120848, step4: enable smooth, smooth_mode=smoothquant, smooth_judge=smooth disabled
 mse:0.22146940, step4: enable smooth, smooth_mode=powersmooth, smooth_judge=smooth enable 
+mse:0.22124010, step4: enable smooth, smooth_mode=smoothquant, smooth_judge=smooth disable
 
 ========== logs/ETTm2_336_336/result.txt ==========
 mse:0.27767026, org
@@ -295,6 +321,7 @@ mse:0.27737471, step2: INT8 to 4 bits, mse_th = 0.27709048986434937
 mse:0.27751097, step3: left INT8 to BFP8, mse_th = 0
 mse:0.27736634, step4: enable smooth, smooth_mode=smoothquant, smooth_judge=smooth disabled
 mse:0.27751097, step4: enable smooth, smooth_mode=powersmooth, smooth_judge=smooth enable 
+mse:0.27746704, step4: enable smooth, smooth_mode=smoothquant, smooth_judge=smooth disable
 
 ========== logs/ETTm2_336_720/result.txt ==========
 mse:0.36745879, org
@@ -306,3 +333,4 @@ mse:0.36736864, step2: INT8 to 4 bits, mse_th = 0.3726882338523865
 mse:0.36743701, step3: left INT8 to BFP8, mse_th = 0
 mse:0.36733380, step4: enable smooth, smooth_mode=smoothquant, smooth_judge=smooth disabled
 mse:0.36743701, step4: enable smooth, smooth_mode=powersmooth, smooth_judge=smooth enable 
+mse:0.36735436, step4: enable smooth, smooth_mode=smoothquant, smooth_judge=smooth disable

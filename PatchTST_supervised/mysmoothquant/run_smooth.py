@@ -478,23 +478,11 @@ if __name__ == '__main__':
             from mysmoothquant.smooth import smooth_lm
             smooth_factors = defaultdict(list)
             act_scales = torch.load(f'act_scales/{args.model_id}.pt')
-            alphas = [i / 10 for i in range(1, 5)]
-            # alphas = [i / 10 for i in np.arange(1, 5, 0.5)]
-            for alpha in alphas:
-                smooth_lm(model, act_scales, alpha, smooth_factors)
-
+          
             for name in qlayers:
-                qlayers[name].y_kl_smoothquant_mean = [0 for _ in alphas]
-                qlayers[name].n_samples = num_samples
-                qlayers[name].step_flag = 4  # search smooth
+                qlayers[name].act_scales = act_scales[name].to('cuda')
                 qlayers[name].powersmooth = args.powersmooth
-
-                key = None
-                if name.endswith(('W_Q', 'W_K', 'W_V')):
-                    key = name[:41] + '.W_Q'
-                else: 
-                    key = name
-                qlayers[name].smooth_factors = smooth_factors[key]
+                qlayers[name].step_flag = 4  # search smooth
 
             # args.batch_size = 128
             data_set, _ = get_data(flag='test', args=args) # default batch_size for smooth search
@@ -508,32 +496,6 @@ if __name__ == '__main__':
 
                 _ = evaluate(test_loader=dataset_for_enable_smooth, print_en=False)
                 _ = evaluate(test_loader=dataset_for_enable_smooth, print_en=False)
-            
-            for name in qlayers:
-                if name.endswith(('W_Q', 'W_K', 'W_V')):
-                    if name.endswith(('W_Q', )):
-                        name_qkv = []
-                        quant_kl_th = []
-                        smoothquant_kl = []
-                    name_qkv.append(name)
-                    quant_kl_th.append(qlayers[name].y_kl_quant_mean)
-                    smoothquant_kl.append(qlayers[name].y_kl_smoothquant_mean)
-                    if name.endswith(('W_V', )):
-                        alpha_idx = select_best_index(smoothquant_kl, quant_kl_th)
-                        if alpha_idx is not None:
-                            for layer_name in name_qkv:
-                                qlayers[layer_name].smooth_factor = qlayers[layer_name].smooth_factors[alpha_idx]
-                                qlayers[layer_name].cfg.alpha = (alpha_idx + 1) / 10
-                else:
-                    quant_kl = qlayers[name].y_kl_quant_mean
-                    smoothquant_kl = qlayers[name].y_kl_smoothquant_mean
-                    min_idx, min_val = min(enumerate(smoothquant_kl), key=lambda x: x[1])
-                    if min_val < quant_kl:
-                        # print(f'\n{quant_kl:.6f}, {name}')
-                        # print(f'{min_val:.6f}, {(min_idx + 1) / 10}, {quant_kl-min_val:.6f}, {quant_kl/min_val:.6f}')
-                        if quant_kl > min_val * 1.01:
-                            qlayers[name].smooth_factor = qlayers[name].smooth_factors[min_idx]
-                            qlayers[name].cfg.alpha = (min_idx + 1) / 10
 
             mse_with_smooth = evaluate(log_en=False, print_en=False, n_samples=4)
             print(f'mse_with_smooth   : {mse_with_smooth:.8f}')

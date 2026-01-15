@@ -6,6 +6,10 @@ from mx.elemwise_ops import quantize_elemwise_op
 
 from mycode.globalVar import append_activation, append_weight
 
+from skopt import gp_minimize
+from skopt.space import Real
+from skopt.utils import use_named_args
+
 @dataclass
 class QuantConfig:
     quant_meth: str          # int8 / int4 / fp8 / bfp
@@ -28,7 +32,6 @@ class QuantWrapper(torch.nn.Module):
         self.bias = module.bias
 
         self.name = False
-        self.smooth_factors = None
         self.smooth_factor = None
         self.loss_func = mse # to select quant data format
         self.smooth_loss_func = mse # to select smooth en
@@ -42,6 +45,7 @@ class QuantWrapper(torch.nn.Module):
         self.store_fp32 = True
         self.y_fp32 = None
         self.powersmooth = False
+        self.act_scales = None
 
 
         self.quant_cfg = {'quant_meth': None, 'quant_bits': None, 'step_flag': None}
@@ -143,7 +147,71 @@ class QuantWrapper(torch.nn.Module):
             else:
                 y_fp32 = torch.load(f'logs/output/{self.name}.pt')
                 self.store_fp32 = True
+
+            x_quant = self.quant_func(x, self.cfg.quant_specs)
+            w_quant = self.quant_func(self.weight, self.cfg.quant_specs)
+            y_quant = torch.functional.F.linear(x_quant, w_quant, self.bias)
+            y_mse_quant = self.smooth_loss_func(y_fp32, y_quant)
+
+            # 定义搜索空间
+            search_space = [Real(0.0, 1.0, name='alpha')]
+            # 定义目标函数
+            @use_named_args(search_space)
+            def objective(**params):
+                alpha = params['alpha']
+                weight_scales = self.weight.max(dim=0)[0].clamp(min=1e-5)
+                scales = (
+                    (self.act_scales.pow(alpha) / weight_scales.pow(1 - alpha))
+                    .clamp(min=1e-5)
+                )
+
+                if self.powersmooth:
+                    power = torch.log2(scales + 1e-6).int()
+                    scales = 2 ** power
+
+                x_smooth = x.div(scales)
+                w_smooth = self.weight.mul(scales)
+                x_smoothquant = self.quant_func(x_smooth, self.cfg.quant_specs)
+                w_smoothquant = self.quant_func(w_smooth, self.cfg.quant_specs)
+                y_smoothquant = torch.functional.F.linear(x_smoothquant, w_smoothquant, self.bias)
+
+                y_mse_smoothquant = self.smooth_loss_func(y_fp32, y_smoothquant)
+
+                return y_mse_smoothquant
+
+            # 运行贝叶斯优化
+            result = gp_minimize(
+                func=objective,
+                dimensions=search_space,
+                n_calls=40,
+                n_initial_points=5,
+                random_state=42,
+                verbose=False
+            )
             
+            optimal_alpha = result.x[0]
+            min_error = result.fun
+            self.step_flag = -4
+
+            if y_mse_quant > min_error:
+                self.cfg.alpha = optimal_alpha
+                weight_scales = self.weight.max(dim=0)[0].clamp(min=1e-5)
+                self.smooth_factor = (
+                    (self.act_scales.pow(optimal_alpha) / weight_scales.pow(1 - optimal_alpha))
+                    .clamp(min=1e-5)
+                )
+                if self.powersmooth:
+                    power = torch.log2(self.smooth_factor + 1e-6).int()
+                    self.smooth_factor = 2 ** power
+                x_smooth = x.div(self.smooth_factor)
+                w_smooth = self.weight.mul(self.smooth_factor)
+                x_quant = self.quant_func(x_smooth if x_smooth is not None else x, self.cfg.quant_specs)
+                w_quant = self.quant_func(w_smooth if w_smooth is not None else self.weight, self.cfg.quant_specs)
+                y = torch.functional.F.linear(x_quant, w_quant, self.bias)
+                return y
+            return y_quant
+            
+            '''
             # append_activation(f'{self.name}_quant', x)
             self.iters += 1
             x_quant = self.quant_func(x, self.cfg.quant_specs)
@@ -192,7 +260,7 @@ class QuantWrapper(torch.nn.Module):
                 if self.iters == self.n_samples: 
                     self.y_kl_smoothquant_mean[alpha_idx] /= self.n_samples
                     self.step_flag = -4
-            return y_quant
+            ''' 
         
         # elif self.initial_weight:
         #     if self.cfg.smooth_en:
@@ -207,6 +275,18 @@ class QuantWrapper(torch.nn.Module):
         #     return torch.zeros_like(x[..., :self.weight.size(0)])
 
         else:
+            x_smooth = x_quant = None
+            w_smooth = w_quant = None
+            if self.cfg.alpha is not None:
+                x_smooth = x.div(self.smooth_factor)
+                w_smooth = self.weight.mul(self.smooth_factor)
+
+            x_quant = self.quant_func(x_smooth if x_smooth is not None else x, self.cfg.quant_specs)
+            w_quant = self.quant_func(w_smooth if w_smooth is not None else self.weight, self.cfg.quant_specs)
+
+            y = torch.functional.F.linear(x_quant, w_quant, self.bias)
+            return y
+            '''
             if self.powersmooth:
                 x_smooth = x_quant = None
                 w_smooth = w_quant = None
@@ -236,6 +316,7 @@ class QuantWrapper(torch.nn.Module):
 
                 y = torch.functional.F.linear(x_quant, w_quant, self.bias)
             return y
+            '''
         
 
 
