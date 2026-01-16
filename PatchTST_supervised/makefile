@@ -21,7 +21,7 @@ weather:
 			mkdir -p logs/$${model_id_name}_$${seq_len}_$${pred_len} ;\
 			python -u mysmoothquant/run_smooth.py $${fixed} \
 			--model_id=$${model_id_name}_$${seq_len}_$${pred_len}  --pred_len=$${pred_len} \
-			--quant --load_cfg --search \
+			--quant --load_cfg --search --powersmooth \
 			| tee logs/$${model_id_name}_$${seq_len}_$${pred_len}/123.log ; \
 		done ;\
 	done ;\
@@ -42,7 +42,7 @@ traffic:
 			mkdir -p logs/$${model_id_name}_$${seq_len}_$${pred_len} ;\
 			python -u mysmoothquant/run_smooth.py $${fixed} \
 			--model_id=$${model_id_name}_$${seq_len}_$${pred_len}  --pred_len=$${pred_len} \
-			--quant --load_cfg --search \
+			--quant --load_cfg --search --powersmooth \
 			| tee logs/$${model_id_name}_$${seq_len}_$${pred_len}/123.log ; \
 		done ;\
 	done ;\
@@ -63,7 +63,7 @@ electricity:
 			mkdir -p logs/$${model_id_name}_$${seq_len}_$${pred_len} ;\
 			python -u mysmoothquant/run_smooth.py $${fixed} \
 			--model_id=$${model_id_name}_$${seq_len}_$${pred_len}  --pred_len=$${pred_len} \
-			--quant --load_cfg --search \
+			--quant --load_cfg --search --powersmooth \
 			| tee logs/$${model_id_name}_$${seq_len}_$${pred_len}/123.log ; \
 		done ;\
 	done ;\
@@ -85,7 +85,7 @@ etth1:
 			mkdir -p logs/$${model_id_name}_$${seq_len}_$${pred_len} ;\
 			python -u mysmoothquant/run_smooth.py $${fixed} \
 			--model_id=$${model_id_name}_$${seq_len}_$${pred_len}  --pred_len=$${pred_len} \
-			--quant --load_cfg --search \
+			--quant --load_cfg --search --powersmooth \
 			| tee logs/$${model_id_name}_$${seq_len}_$${pred_len}/123.log ; \
 		done ;\
 	done ;\
@@ -107,7 +107,7 @@ etth2:
 			mkdir -p logs/$${model_id_name}_$${seq_len}_$${pred_len} ;\
 			python -u mysmoothquant/run_smooth.py $${fixed} \
 			--model_id=$${model_id_name}_$${seq_len}_$${pred_len}  --pred_len=$${pred_len} \
-			--quant --load_cfg --search \
+			--quant --load_cfg --search --powersmooth \
 			| tee logs/$${model_id_name}_$${seq_len}_$${pred_len}/123.log ; \
 		done ;\
 	done ;\
@@ -129,7 +129,7 @@ ettm1:
 			mkdir -p logs/$${model_id_name}_$${seq_len}_$${pred_len} ;\
 			python -u mysmoothquant/run_smooth.py $${fixed} \
 			--model_id=$${model_id_name}_$${seq_len}_$${pred_len}  --pred_len=$${pred_len} \
-			--quant --load_cfg --search \
+			--quant --load_cfg --search --powersmooth \
 			| tee logs/$${model_id_name}_$${seq_len}_$${pred_len}/123.log ; \
 		done ;\
 	done ;\
@@ -151,7 +151,7 @@ ettm2:
 			mkdir -p logs/$${model_id_name}_$${seq_len}_$${pred_len} ;\
 			python -u mysmoothquant/run_smooth.py $${fixed} \
 			--model_id=$${model_id_name}_$${seq_len}_$${pred_len}  --pred_len=$${pred_len} \
-			--quant --load_cfg --search \
+			--quant --load_cfg --search --powersmooth \
 			| tee logs/$${model_id_name}_$${seq_len}_$${pred_len}/123.log ; \
 		done ;\
 	done ;\
