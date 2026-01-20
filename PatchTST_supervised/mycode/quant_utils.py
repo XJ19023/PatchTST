@@ -46,6 +46,7 @@ class QuantWrapper(torch.nn.Module):
         self.y_fp32 = None
         self.powersmooth = False
         self.act_scales = None
+        self.rotation_matrix = None
 
 
         self.quant_cfg = {'quant_meth': None, 'quant_bits': None, 'step_flag': None}
@@ -275,6 +276,8 @@ class QuantWrapper(torch.nn.Module):
         #     return torch.zeros_like(x[..., :self.weight.size(0)])
 
         else:
+            if self.rotation_matrix is not None:
+                x = torch.matmul(x.to(device='cuda', dtype=torch.float64), self.rotation_matrix).to(device='cuda', dtype=self.weight.dtype)
             x_smooth = x_quant = None
             w_smooth = w_quant = None
             if self.cfg.alpha is not None:
@@ -282,7 +285,7 @@ class QuantWrapper(torch.nn.Module):
                 w_smooth = self.weight.mul(self.smooth_factor)
 
             x_quant = self.quant_func(x_smooth if x_smooth is not None else x, self.cfg.quant_specs)
-            w_quant = self.quant_func(w_smooth if w_smooth is not None else self.weight, self.cfg.quant_specs)
+            w_quant = self.quant_func(w_smooth if w_smooth is not None else self.weight, self.cfg.quant_specs).to(device=x.device)
 
             y = torch.functional.F.linear(x_quant, w_quant, self.bias)
             return y

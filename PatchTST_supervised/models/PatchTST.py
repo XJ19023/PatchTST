@@ -20,6 +20,7 @@ class Model(nn.Module):
         super().__init__()
         
         # load parameters
+        self.config = configs
         c_in = configs.enc_in
         context_window = configs.seq_len
         target_window = configs.pred_len

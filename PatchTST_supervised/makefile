@@ -8,20 +8,20 @@ all: electricity
 # SHELL := /bin/bash
 weather:
 	@start=$$(date +%s); \
-	seq_len=512; \
+	seq_len=336; \
 	model_name=PatchTST; \
 	model_id_name=weather; \
 	weather_fixed="--random_seed=2021 --is_training=0 --root_path=./dataset/ --data_path=$${model_id_name}.csv  --model=$$model_name --data=custom --features=M --seq_len=$${seq_len} --enc_in=21 --e_layers=3 --n_heads=16 --d_model=128 --d_ff=256 --dropout=0.2 --fc_dropout=0.2 --head_dropout=0 --patch_len=16 --stride=8 --des=Exp --train_epochs=100 --patience=20 --itr=1 --batch_size=128 --learning_rate=0.0001"; \
 	electricity_fixed="--random_seed=2021 --is_training=0 --root_path=./dataset/ --data_path=$${model_id_name}.csv --model=$$model_name --data=custom --features=M --seq_len=$${seq_len} --enc_in=321 --e_layers=3 --n_heads=16 --d_model=128 --d_ff=256 --dropout=0.2 --fc_dropout=0.2 --head_dropout=0 --patch_len=16 --stride=8 --des=Exp --train_epochs=100 --patience=10 --itr=1 --batch_size=32 --learning_rate=0.0001"; \
 	traffic_fixed="--random_seed=2021 --is_training=0 --root_path=./dataset/ --data_path=$${model_id_name}.csv --model=$$model_name --data=custom --features=M --seq_len=$${seq_len} --enc_in 862 --e_layers 3 --n_heads 16 --d_model 128 --d_ff 256 --dropout 0.2 --fc_dropout 0.2 --head_dropout 0 --patch_len 16 --stride 8 --des Exp --train_epochs 100 --patience 10 --lradj 'TST' --pct_start 0.2 --itr 1 --batch_size 64 --learning_rate 0.0001"; \
 	fixed=$$weather_fixed; \
-	pred_lens="96 192 336 720"; \
+	pred_lens="96"; \
 	for pred_len in $$pred_lens; do \
 		for smooth_n_samples in 1; do \
 			mkdir -p logs/$${model_id_name}_$${seq_len}_$${pred_len} ;\
 			python -u mysmoothquant/run_smooth.py $${fixed} \
 			--model_id=$${model_id_name}_$${seq_len}_$${pred_len}  --pred_len=$${pred_len} \
-			--quant --load_cfg --search --powersmooth \
+			--quant --separate --rotate \
 			| tee logs/$${model_id_name}_$${seq_len}_$${pred_len}/123.log ; \
 		done ;\
 	done ;\
