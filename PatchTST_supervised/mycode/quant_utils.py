@@ -277,6 +277,7 @@ class QuantWrapper(torch.nn.Module):
 
         else:
             if self.rotation_matrix is not None:
+                # print(self.name, 'using rotation matrix')
                 x = torch.matmul(x.to(device='cuda', dtype=torch.float64), self.rotation_matrix).to(device='cuda', dtype=self.weight.dtype)
             x_smooth = x_quant = None
             w_smooth = w_quant = None
@@ -288,6 +289,8 @@ class QuantWrapper(torch.nn.Module):
             w_quant = self.quant_func(w_smooth if w_smooth is not None else self.weight, self.cfg.quant_specs).to(device=x.device)
 
             y = torch.functional.F.linear(x_quant, w_quant, self.bias)
+            # if self.name == 'model.backbone.encoder.layers.0.self_attn.W_Q':
+            #     print(y.reshape(-1)[:10].tolist())
             return y
             '''
             if self.powersmooth:

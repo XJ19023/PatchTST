@@ -116,11 +116,28 @@ def get_orthogonal_matrix(size, mode, device='cuda'):
 
 def rotate_embeddings(model, Q: torch.Tensor) -> None:
     # Rotate the embeddings.
-    model_type = model_utils.model_type_extractor(model)
-    for W in model_utils.get_embeddings(model, model_type):
-        dtype = W.weight.data.dtype
-        W_ = W.weight.data.to(device='cuda', dtype=torch.float64)
-        W.weight.data = torch.matmul(W_, Q).to(device="cpu", dtype=dtype)
+    # model_type = model_utils.model_type_extractor(model)
+    # for W in model_utils.get_embeddings(model, model_type):
+    #     dtype = W.weight.data.dtype
+    #     W_ = W.weight.data.to(device='cuda', dtype=torch.float64)
+    #     W.weight.data = torch.matmul(W_, Q).to(device="cpu", dtype=dtype)
+    W = model.model.backbone.W_P
+    dtype = W.weight.data.dtype
+    W_ = W.weight.data.to(device='cuda', dtype=torch.float64)
+    W.weight.data = torch.matmul(Q.T, W_).to(device="cuda", dtype=dtype)
+    if W.bias is not None:
+        b = W.bias.data.to(device='cuda', dtype=torch.float64)
+        
+        # 4. 适配偏置的1D张量维度（将1D转为2D列向量，避免matmul歧义）
+        b_reshaped = b.unsqueeze(1)  # shape: [out_dim] -> [out_dim, 1]
+        if Q.T.shape[-1] != b_reshaped.shape[0]:
+            raise ValueError(f"Q.T 最后一维({Q.T.shape[-1]})与bias第一维({b_reshaped.shape[0]})不匹配")
+        
+        # 执行乘法后恢复1D形状
+        new_bias = torch.matmul(Q.T, b_reshaped).squeeze(1)  # shape: [new_dim, 1] -> [new_dim]
+        W.bias.data = new_bias.to(device='cuda', dtype=dtype)
+
+
 
     
 def rotate_attention_inputs(layer, Q) -> None:
@@ -128,7 +145,11 @@ def rotate_attention_inputs(layer, Q) -> None:
     for W in [layer.self_attn.W_Q, layer.self_attn.W_K, layer.self_attn.W_V]:
         dtype = W.weight.dtype
         W_ = W.weight.to(device='cuda', dtype=torch.float64)
-        W.weight.data = torch.matmul(W_, Q).to(device="cpu", dtype=dtype)
+        W.weight.data = torch.matmul(W_, Q).to(device="cuda", dtype=dtype)
+
+        # if W.bias is not None:
+        #     b = W.bias.data.to(device='cuda', dtype=torch.float64)
+        #     W.bias.data = torch.matmul(b, Q).to(device="cuda", dtype=dtype)
 
 def rotate_attention_output(layer, Q, model_type) -> None:
     # Rotate output matrix of the self-attention layer.
@@ -159,22 +180,23 @@ def rotate_mlp_input(layer, Q, model_type):
         W_ = W.weight.data.to(device='cuda', dtype=torch.float64)
         W.weight.data = torch.matmul(W_, Q).to(device="cpu", dtype=dtype)
     
-def rotate_mlp_output(layer, Q, model_type, args):
+def rotate_mlp_output(layer, Q):
     # Rotate the MLP output weights and bias.
-    if model_type == model_utils.LLAMA_MODEL:
-        W = layer.mlp.down_proj
-    elif model_type == model_utils.OPT_MODEL:
-        W = layer.fc2
-    else:
-        raise ValueError(f'Unknown model type {model_type}')
+    # if model_type == model_utils.LLAMA_MODEL:
+    #     W = layer.mlp.down_proj
+    # elif model_type == model_utils.OPT_MODEL:
+    #     W = layer.fc2
+    # else:
+    #     raise ValueError(f'Unknown model type {model_type}')
+    W = layer.ff[3]
     dtype = W.weight.data.dtype
     W_ = W.weight.data.to(device='cuda', dtype=torch.float64)
-    W.weight.data = torch.matmul(Q.T, W_).to(device="cpu", dtype=dtype)
-    if args.rotate_online:
-        apply_exact_had_to_linear(W, had_dim=-1, output=False) #apply exact (inverse) hadamard on the weights of mlp output
+    W.weight.data = torch.matmul(Q.T, W_).to(device="cuda", dtype=dtype)
+    # if args.rotate_online:
+    #     apply_exact_had_to_linear(W, had_dim=-1, output=False) #apply exact (inverse) hadamard on the weights of mlp output
     if W.bias is not None:
         b = W.bias.data.to(device='cuda', dtype=torch.float64)
-        W.bias.data = torch.matmul(Q.T, b).to(device="cpu", dtype=dtype)
+        W.bias.data = torch.matmul(Q.T, b).to(device="cuda", dtype=dtype)
 
 def matmul_hadU_cuda_had(X, hadK, transpose=False):
     '''
@@ -213,7 +235,7 @@ def rotate_head(model, Q: torch.Tensor) -> None:
     W = model.model.head.linear
     dtype = W.weight.data.dtype
     W_ = W.weight.data.to(device='cuda', dtype=torch.float64)
-    W.weight.data = torch.matmul(W_, Q).to(device="cpu", dtype=dtype)
+    W.weight.data = torch.matmul(W_, Q).to(device="cuda", dtype=dtype)
 
 def rotate_ov_proj(layer, model_type, head_num, head_dim):
     v_proj = layer.self_attn.v_proj
@@ -249,7 +271,7 @@ def rotate_model(model, args):
         rotate_attention_inputs(layers[idx], Q)
         # rotate_attention_output(layers[idx], Q)
         # rotate_mlp_input(layers[idx], Q)
-        # rotate_mlp_output(layers[idx], Q, args)
+        # rotate_mlp_output(layers[idx], Q)
         # if args.rotate_online:
         #     rotate_ov_proj(layers[idx], num_heads, head_dim)
     return Q

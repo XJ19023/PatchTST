@@ -311,10 +311,17 @@ if __name__ == '__main__':
         for name in qlayers:
             qlayers[name].name = name
 
+        # if args.rotate:
+        #     args.rotate_mode = 'hadamard'
+        #     Q = rotation_utils.rotate_model(model, args)
+        #     for name in qlayers:
+        #         if name.endswith(('W_Q', 'W_K', 'W_V')):
+        #             qlayers[name].rotation_matrix = Q.to('cuda')
+
         if args.separate: 
             cal_mse_space = []
             # int quant
-            for n_bits in [4]:
+            for n_bits in [4, 8]:
                 int_specs = {'n_bits': n_bits}
                 cal_mse_space.append(quant_utils.QuantConfig('int', int_specs, None))
             # mx quant
@@ -325,16 +332,6 @@ if __name__ == '__main__':
             for idx, cfg in enumerate(cal_mse_space):
                 for name in qlayers:
                     qlayers[name].set_quant_config(cfg)
-
-                if args.rotate:
-                    args.rotate_mode = 'hadamard'
-                    Q = rotation_utils.rotate_model(model, args)
-                    for name in qlayers:
-                        if name.endswith(('W_Q', 'W_K', 'W_V')):
-                            print(name, 'rotation applied')
-                            qlayers[name].rotation_matrix = Q.to('cuda')
-                evaluate(log_en=False, n_samples=args.n_samples)
-                exit()
 
                 if idx == 0:
                     loggings = f'int8'
@@ -488,6 +485,17 @@ if __name__ == '__main__':
 
             mse_without_smooth = evaluate(log_en=False, print_en=False, n_samples=4)
 
+            if args.rotate:
+                args.rotate_mode = 'hadamard'
+                Q = rotation_utils.rotate_model(model, args)
+                for name in qlayers:
+                    if name.endswith(('W_Q', 'W_K', 'W_V')):
+                        qlayers[name].rotation_matrix = Q.to('cuda')
+            # loggings = f"step4: enable rotation"
+            # mse_smooth = evaluate(log_en=True, print_en=False, n_samples=args.n_samples)
+            # print(f'mse_smooth: {mse_smooth:.8f}')
+            # exit()
+
             print('----------Step4: enable smooth---------------')
             num_samples = 1
             from mysmoothquant.smooth import smooth_lm
@@ -495,9 +503,10 @@ if __name__ == '__main__':
             act_scales = torch.load(f'act_scales/{args.model_id}.pt')
           
             for name in qlayers:
-                qlayers[name].act_scales = act_scales[name].to('cuda')
-                qlayers[name].powersmooth = args.powersmooth
-                qlayers[name].step_flag = 4  # search smooth
+                if not name.endswith(('W_Q', 'W_K', 'W_V')):
+                    qlayers[name].act_scales = act_scales[name].to('cuda')
+                    qlayers[name].powersmooth = args.powersmooth
+                    qlayers[name].step_flag = 4  # search smooth
 
             # args.batch_size = 128
             data_set, _ = get_data(flag='test', args=args) # default batch_size for smooth search
