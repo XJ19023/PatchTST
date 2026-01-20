@@ -1,0 +1,92 @@
+{
+  "model.backbone.encoder.layers.0.self_attn.W_Q": {
+    "quant_meth": "int",
+    "quant_bits": 4,
+    "step_flag": -2
+  },
+  "model.backbone.encoder.layers.0.self_attn.W_K": {
+    "quant_meth": "int",
+    "quant_bits": 4,
+    "step_flag": -2
+  },
+  "model.backbone.encoder.layers.0.self_attn.W_V": {
+    "quant_meth": "mx",
+    "quant_bits": 4,
+    "step_flag": -2
+  },
+  "model.backbone.encoder.layers.0.self_attn.to_out.0": {
+    "quant_meth": "mx",
+    "quant_bits": 4,
+    "step_flag": -2
+  },
+  "model.backbone.encoder.layers.0.ff.0": {
+    "quant_meth": "mx",
+    "quant_bits": 8,
+    "step_flag": -3
+  },
+  "model.backbone.encoder.layers.0.ff.3": {
+    "quant_meth": "mx",
+    "quant_bits": 4,
+    "step_flag": -2
+  },
+  "model.backbone.encoder.layers.1.self_attn.W_Q": {
+    "quant_meth": "int",
+    "quant_bits": 4,
+    "step_flag": -2
+  },
+  "model.backbone.encoder.layers.1.self_attn.W_K": {
+    "quant_meth": "mx",
+    "quant_bits": 4,
+    "step_flag": -2
+  },
+  "model.backbone.encoder.layers.1.self_attn.W_V": {
+    "quant_meth": "mx",
+    "quant_bits": 8,
+    "step_flag": -3
+  },
+  "model.backbone.encoder.layers.1.self_attn.to_out.0": {
+    "quant_meth": "mx",
+    "quant_bits": 8,
+    "step_flag": -3
+  },
+  "model.backbone.encoder.layers.1.ff.0": {
+    "quant_meth": "int",
+    "quant_bits": 4,
+    "step_flag": -2
+  },
+  "model.backbone.encoder.layers.1.ff.3": {
+    "quant_meth": "mx",
+    "quant_bits": 4,
+    "step_flag": -2
+  },
+  "model.backbone.encoder.layers.2.self_attn.W_Q": {
+    "quant_meth": "int",
+    "quant_bits": 4,
+    "step_flag": -2
+  },
+  "model.backbone.encoder.layers.2.self_attn.W_K": {
+    "quant_meth": "mx",
+    "quant_bits": 8,
+    "step_flag": -3
+  },
+  "model.backbone.encoder.layers.2.self_attn.W_V": {
+    "quant_meth": "mx",
+    "quant_bits": 8,
+    "step_flag": -3
+  },
+  "model.backbone.encoder.layers.2.self_attn.to_out.0": {
+    "quant_meth": "mx",
+    "quant_bits": 8,
+    "step_flag": -3
+  },
+  "model.backbone.encoder.layers.2.ff.0": {
+    "quant_meth": "mx",
+    "quant_bits": 8,
+    "step_flag": -3
+  },
+  "model.backbone.encoder.layers.2.ff.3": {
+    "quant_meth": "mx",
+    "quant_bits": 4,
+    "step_flag": -2
+  }
+}

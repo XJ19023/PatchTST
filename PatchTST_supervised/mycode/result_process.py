@@ -4,7 +4,7 @@ import os
 files_to_search = []
 for i in ['weather', 'traffic', 'electricity', 'ETTh1', 'ETTh2', 'ETTm1', 'ETTm2']:
     for j in ['96', '192', '336', '720']:
-        file_path = f"logs/{i}_336_{j}/result.txt"
+        file_path = f"logs/{i}_512_{j}/result.txt"
         files_to_search.append(file_path)
 
 # ========== 需要搜索的关键词 ==========

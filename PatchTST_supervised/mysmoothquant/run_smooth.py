@@ -90,7 +90,7 @@ def evaluate(n_samples=None, test_loader=None, log_en=False, print_en=True):
     if log_en:
         with open(f"logs/{args.model_id}/result.txt", 'a') as f:
             f.write(f"mse:{mse:.8f}, {loggings}")
-            # f.write('\n')
+            f.write('\n')
     return mse
 
 if __name__ == '__main__':
@@ -501,9 +501,9 @@ if __name__ == '__main__':
             print(f'mse_with_smooth   : {mse_with_smooth:.8f}')
             print(f'mse_without_smooth: {mse_without_smooth:.8f}')
             if mse_with_smooth >= mse_without_smooth:
-                smooth_log = 'smooth disable\n'
+                smooth_log = 'smooth disable'
             else:
-                smooth_log = 'smooth enable \n'
+                smooth_log = 'smooth enable '
 
             loggings = f"step4: enable smooth, smooth_mode={'powersmooth' if args.powersmooth else 'smoothquant'}, smooth_judge={smooth_log}"
             mse_smooth = evaluate(log_en=True, print_en=False)

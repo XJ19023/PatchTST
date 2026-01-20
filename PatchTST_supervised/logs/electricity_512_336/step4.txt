@@ -1,0 +1,117 @@
+>>> Step4 Model <<< enable smooth
+Model(
+  (model): PatchTST_backbone(
+    (revin_layer): RevIN()
+    (padding_patch_layer): ReplicationPad1d((0, 8))
+    (backbone): TSTiEncoder(
+      (W_P): Linear(in_features=16, out_features=128, bias=True)
+      (dropout): Dropout(p=0.2, inplace=False)
+      (encoder): TSTEncoder(
+        (layers): ModuleList(
+          (0): TSTEncoderLayer(
+            (self_attn): _MultiheadAttention(
+              (W_Q): QuantWrapper(quant_meth: BFP4, setp: -4, smooth: True, a: 0.20952140099735145)
+              (W_K): QuantWrapper(quant_meth: BFP4, setp: -4, smooth: True, a: 0.1330633679348068)
+              (W_V): QuantWrapper(quant_meth: BFP4, setp: -4, smooth: True, a: 0.2214742302188108)
+              (sdp_attn): _ScaledDotProductAttention(
+                (attn_dropout): Dropout(p=0.0, inplace=False)
+              )
+              (to_out): Sequential(
+                (0): QuantWrapper(quant_meth: BFP4, setp: -4, smooth: False)
+                (1): Dropout(p=0.2, inplace=False)
+              )
+            )
+            (dropout_attn): Dropout(p=0.2, inplace=False)
+            (norm_attn): Sequential(
+              (0): Transpose()
+              (1): BatchNorm1d(128, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+              (2): Transpose()
+            )
+            (ff): Sequential(
+              (0): QuantWrapper(quant_meth: BFP8, setp: -4, smooth: True, a: 0.22702082555351205)
+              (1): GELU(approximate='none')
+              (2): Dropout(p=0.2, inplace=False)
+              (3): QuantWrapper(quant_meth: BFP8, setp: -4, smooth: True, a: 0.3009538483084469)
+            )
+            (dropout_ffn): Dropout(p=0.2, inplace=False)
+            (norm_ffn): Sequential(
+              (0): Transpose()
+              (1): BatchNorm1d(128, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+              (2): Transpose()
+            )
+          )
+          (1): TSTEncoderLayer(
+            (self_attn): _MultiheadAttention(
+              (W_Q): QuantWrapper(quant_meth: BFP8, setp: -4, smooth: True, a: 0.6176013949408056)
+              (W_K): QuantWrapper(quant_meth: BFP8, setp: -4, smooth: True, a: 0.5303996883397105)
+              (W_V): QuantWrapper(quant_meth: BFP8, setp: -4, smooth: True, a: 0.22598079886496253)
+              (sdp_attn): _ScaledDotProductAttention(
+                (attn_dropout): Dropout(p=0.0, inplace=False)
+              )
+              (to_out): Sequential(
+                (0): QuantWrapper(quant_meth: BFP8, setp: -4, smooth: True, a: 0.32931591832639967)
+                (1): Dropout(p=0.2, inplace=False)
+              )
+            )
+            (dropout_attn): Dropout(p=0.2, inplace=False)
+            (norm_attn): Sequential(
+              (0): Transpose()
+              (1): BatchNorm1d(128, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+              (2): Transpose()
+            )
+            (ff): Sequential(
+              (0): QuantWrapper(quant_meth: BFP8, setp: -4, smooth: True, a: 0.029092286624739068)
+              (1): GELU(approximate='none')
+              (2): Dropout(p=0.2, inplace=False)
+              (3): QuantWrapper(quant_meth: BFP4, setp: -4, smooth: True, a: 0.18379859211718566)
+            )
+            (dropout_ffn): Dropout(p=0.2, inplace=False)
+            (norm_ffn): Sequential(
+              (0): Transpose()
+              (1): BatchNorm1d(128, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+              (2): Transpose()
+            )
+          )
+          (2): TSTEncoderLayer(
+            (self_attn): _MultiheadAttention(
+              (W_Q): QuantWrapper(quant_meth: INT8, setp: -4, smooth: True, a: 0.25262410632416515)
+              (W_K): QuantWrapper(quant_meth: INT8, setp: -4, smooth: True, a: 0.14185159690275553)
+              (W_V): QuantWrapper(quant_meth: BFP8, setp: -4, smooth: True, a: 0.44583275285359125)
+              (sdp_attn): _ScaledDotProductAttention(
+                (attn_dropout): Dropout(p=0.0, inplace=False)
+              )
+              (to_out): Sequential(
+                (0): QuantWrapper(quant_meth: BFP8, setp: -4, smooth: True, a: 0.3009538483084469)
+                (1): Dropout(p=0.2, inplace=False)
+              )
+            )
+            (dropout_attn): Dropout(p=0.2, inplace=False)
+            (norm_attn): Sequential(
+              (0): Transpose()
+              (1): BatchNorm1d(128, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+              (2): Transpose()
+            )
+            (ff): Sequential(
+              (0): QuantWrapper(quant_meth: BFP8, setp: -4, smooth: False)
+              (1): GELU(approximate='none')
+              (2): Dropout(p=0.2, inplace=False)
+              (3): QuantWrapper(quant_meth: BFP4, setp: -4, smooth: True, a: 0.037235277288955156)
+            )
+            (dropout_ffn): Dropout(p=0.2, inplace=False)
+            (norm_ffn): Sequential(
+              (0): Transpose()
+              (1): BatchNorm1d(128, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+              (2): Transpose()
+            )
+          )
+        )
+      )
+    )
+    (head): Flatten_Head(
+      (flatten): Flatten(start_dim=-2, end_dim=-1)
+      (linear): Linear(in_features=8192, out_features=336, bias=True)
+      (dropout): Dropout(p=0.0, inplace=False)
+    )
+  )
+)
+

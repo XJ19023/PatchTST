@@ -1,0 +1,8 @@
+mse:0.29011291, org
+mse:0.29011348, int8
+mse:0.29122737, int4
+mse:0.29211050, BFP8
+mse:0.29034603, BFP4
+mse:0.28963003, step2: INT8 to 4 bits, mse_th = 0.28855130076408386
+mse:0.29019502, step3: left INT8 to BFP8, mse_th = 0
+mse:0.29059896, step4: enable smooth, smooth_mode=smoothquant, smooth_judge=smooth enable 
