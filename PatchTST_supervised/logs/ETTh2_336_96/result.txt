@@ -7,3 +7,4 @@ mse:0.27391231, step2: INT8 to 4 bits, mse_th = 0.27408093214035034
 mse:0.27390292, step3: left INT8 to BFP8, mse_th = 0
 mse:0.27397284, step4: enable smooth, smooth_mode=smoothquant, smooth_judge=smooth enable 
 mse:0.27381891, step4: enable smooth, smooth_mode=powersmooth, smooth_judge=smooth disable
+mse:0.27385318, step4: enable smooth, smooth_mode=rotate+smoothquant, smooth_judge=smooth enable 

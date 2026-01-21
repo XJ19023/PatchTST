@@ -530,6 +530,8 @@ if __name__ == '__main__':
                 smooth_log = 'smooth enable '
 
             loggings = f"step4: enable smooth, smooth_mode={'powersmooth' if args.powersmooth else 'smoothquant'}, smooth_judge={smooth_log}"
+            if args.rotate:
+                loggings = f"step4: enable smooth, smooth_mode={'rotate+' + ('powersmooth' if args.powersmooth else 'smoothquant')}, smooth_judge={smooth_log}"
             mse_smooth = evaluate(log_en=True, print_en=False)
             print(f'mse_smooth: {mse_smooth:.8f}')
             with open(f'logs/{args.model_id}/step4.txt', 'w') as f:
